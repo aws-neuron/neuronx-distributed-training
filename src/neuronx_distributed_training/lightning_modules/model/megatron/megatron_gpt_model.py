@@ -201,12 +201,13 @@ class MegatronGPTModel(MegatronBaseModel):
             total_batches = len(batch_for_pipeline)
             for batch in batch_for_pipeline:
                 tokens, labels, loss_mask, _, position_ids = batch
-                output = self.model(
-                    tokens.to(device),
-                    position_ids.to(device),
-                    labels=labels.to(device),
-                    loss_mask=loss_mask.to(device),
-                )
+                with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
+                    output = self.model(
+                        tokens.to(device),
+                        position_ids.to(device),
+                        labels=labels.to(device),
+                        loss_mask=loss_mask.to(device),
+                    )
                 loss = output[0] if self.save_logits else output
                 # Want to run the loss in fp32 so that the division and sum are not affect by dp degree
                 if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
@@ -218,12 +219,13 @@ class MegatronGPTModel(MegatronBaseModel):
         else:
             tokens, labels, loss_mask, _, position_ids = self.trainer.datamodule.process_global_batch(batch)
             fwd_bwd_fn = self.model.run_train if is_training else self.model.run_eval
-            output = fwd_bwd_fn(
-                input_ids=tokens,
-                position_ids=position_ids,
-                labels=labels,
-                loss_mask=loss_mask,
-            )
+            with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
+                output = fwd_bwd_fn(
+                    input_ids=tokens,
+                    position_ids=position_ids,
+                    labels=labels,
+                    loss_mask=loss_mask,
+                )
             if parallel_state.get_pipeline_model_parallel_rank() == (
                 parallel_state.get_pipeline_model_parallel_size() - 1
             ):

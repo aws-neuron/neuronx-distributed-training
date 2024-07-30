@@ -55,6 +55,16 @@ def process_config(cfg):
         set_env_variable("XLA_USE_BF16", cfg.precision.get("xla_use_bf16"))
         set_env_variable("XLA_DOWNCAST_BF16", cfg.precision.get("xla_downcast_bf16"))
         set_env_variable("NEURON_RT_STOCHASTIC_ROUNDING_EN", cfg.precision.get("neuron_rt_stochastic_rounding_en"))
+    elif cfg.precision.get("type") == "autocast":
+        set_env_variable("XLA_USE_BF16", "0")
+        set_env_variable("XLA_DOWNCAST_BF16", "0")
+        set_env_variable("NEURON_RT_STOCHASTIC_ROUNDING_EN", "0")
+        set_env_variable("NEURON_CC_FLAGS", "--enable-mixed-precision-accumulation --auto-cast none", append=True)
+    else:
+        raise ValueError(
+            "Invalid option given for precision type. Must be one of bf16SR, fp32, autocast, mixed_precision, mixed_precisionSR, or manual."
+        )
+
 
 @hydra.main(config_path="conf",config_name="megatron_gpt_config", version_base="1.2")
 def main(cfg) -> None:
