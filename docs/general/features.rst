@@ -15,11 +15,7 @@ a model hub featuring end-to-end examples for state of the art models like LLama
 both HuggingFace and Megatron-LM model classes.
 
 The framework uses the distributed training technology from NxD. This allows the framework to support all the
-sharding techniques and Modules already supported by NxD.
-
-.. contents:: Table of contents
-   :local:
-   :depth: 2
+sharding techniques and Modules already supported by NxD. This includes:
 
 Distributed Techniques
 -----------------------
@@ -36,11 +32,11 @@ Distributed Techniques
 Modules
 --------
 
-1. `Grouped Query Attention layer <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
+1. `Grouped Query Attention layer <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
 2. Mixture of Experts (MoE)
 
-Model/Optimizer Precision
--------------------------
+Precision
+----------
 
 To cater to different types of precision that can affect the overall training, the library provides an option to
 configure the following:
