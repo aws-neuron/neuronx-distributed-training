@@ -16,6 +16,7 @@
 """Transformer."""
 import datetime
 import math
+import os
 from contextlib import nullcontext
 
 import torch
@@ -54,10 +55,11 @@ from neuronx_distributed.parallel_layers.utils import divide as safe_divide
 from neuronx_distributed.modules.moe.model import MoE
 from neuronx_distributed.modules.moe.routing import RouterTopK, RouterSinkhorn
 from neuronx_distributed.modules.moe.expert_mlps import ExpertMLPs
+from neuronx_distributed.modules.rms_norm import RMSNorm
 from packaging import version
 from transformers.utils import is_torch_tpu_available
 
-from .fused_layer_norm import MixedFusedRMSNorm, get_layer_norm
+from .fused_layer_norm import get_layer_norm
 from .rotary_pos_embedding import RotaryEmbedding, apply_rotary_pos_emb
 
 if version.parse(torch.__version__) >= version.parse("2.1"):
@@ -187,7 +189,7 @@ class ParallelMLP(MegatronModule, adapter_mixins.AdapterModuleMixin):
                     sequence_parallel_enabled=sequence_parallel,
                 )
             else:
-                self.normalization = MixedFusedRMSNorm(
+                self.normalization = RMSNorm(
                     ffn_hidden_size // parallel_state.get_tensor_model_parallel_size(),
                     layernorm_epsilon,
                     sequence_parallel_enabled=sequence_parallel,
@@ -701,8 +703,18 @@ class CoreAttention(MegatronModule):
         # Attention probs and dropout
         # ===========================
 
+        # We explicitly do .to(torch.double) here instead of torch.float()
+        # so that it stays fp32 even if XLA_DOWNCAST_BF16 is set.
+        # Upcast inputs to softmax
+        original_input_dtype = attention_scores.dtype
+        if os.environ.get("XLA_DOWNCAST_BF16") == 1:
+            attention_scores = attention_scores.to(torch.double)
+
         # attention scores and attention mask [b, np, sq, sk]
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+
+        # Downcast output back to original dtype
+        attention_probs.to(original_input_dtype)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -1571,7 +1583,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
             else:
-                self.input_layernorm = MixedFusedRMSNorm(
+                self.input_layernorm = RMSNorm(
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
 
@@ -1619,7 +1631,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                         hidden_size, layernorm_epsilon, persist_layer_norm
                     )
                 else:
-                    self.post_attention_normformer_norm = MixedFusedRMSNorm(
+                    self.post_attention_normformer_norm = RMSNorm(
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
 
@@ -1635,7 +1647,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
                 else:
-                    self.post_attention_layernorm = MixedFusedRMSNorm(
+                    self.post_attention_layernorm = RMSNorm(
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
 
@@ -1656,7 +1668,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
             else:
-                self.post_attention_layernorm = MixedFusedRMSNorm(
+                self.post_attention_layernorm = RMSNorm(
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
 
@@ -1698,7 +1710,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
                 else:
-                    self.post_inter_attention_normformer_norm = MixedFusedRMSNorm(
+                    self.post_inter_attention_normformer_norm = RMSNorm(
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
 
@@ -1712,7 +1724,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
             else:
-                self.post_inter_attention_layernorm = MixedFusedRMSNorm(
+                self.post_inter_attention_layernorm = RMSNorm(
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
         elif (
@@ -1748,7 +1760,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
                 else:
-                    self.post_inter_attention_normformer_norm = MixedFusedRMSNorm(
+                    self.post_inter_attention_normformer_norm = RMSNorm(
                         hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                     )
 
@@ -1762,7 +1774,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
             else:
-                self.post_inter_attention_layernorm = MixedFusedRMSNorm(
+                self.post_inter_attention_layernorm = RMSNorm(
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
 
@@ -1993,7 +2005,9 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
             )
 
             layernorm_input = bias_dropout_add_func(attention_output, attention_bias, residual, self.hidden_dropout)
+
             normalization_output = self.post_inter_attention_layernorm(layernorm_input)
+
             # Post-LN normalization after residual
             if self.transformer_block_type == "post_ln":
                 layernorm_input = normalization_output
@@ -2454,7 +2468,7 @@ class ParallelTransformer(MegatronModule):
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
             else:
-                self.final_layernorm = MixedFusedRMSNorm(
+                self.final_layernorm = RMSNorm(
                     hidden_size, layernorm_epsilon, sequence_parallel_enabled=sequence_parallel
                 )
 

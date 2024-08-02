@@ -49,7 +49,7 @@ from neuronx_distributed.parallel_layers.layers import (
 from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.trainer.trainer import Trainer
 
-from neuronx_distributed_training.models.megatron.fused_layer_norm import MixedFusedRMSNorm
+from neuronx_distributed.modules.rms_norm import RMSNorm
 from neuronx_distributed_training.models.megatron.gpt_model import GPTModel
 from neuronx_distributed_training.models.megatron.transformer import (
     ParallelTransformerLayer,
@@ -65,7 +65,7 @@ class ModelModule:
         self.is_resuming_from_checkpoint = is_resuming_from_checkpoint
 
     def build_model(self, nxd_config):
-        leaf_module_cls = [MixedFusedLayerNorm.__name__, MixedFusedRMSNorm.__name__]
+        leaf_module_cls = [MixedFusedLayerNorm.__name__, RMSNorm.__name__]
         nxd_config["pipeline_config"].update(
             {
                 "transformer_layer_cls": ParallelTransformerLayer,
@@ -242,7 +242,7 @@ class MegatronGPTModel(MegatronBaseModel):
         """
         # Last else should always call super().init_weights() to allow initializing
         # pre-defined layers.
-        if isinstance(module, MixedFusedRMSNorm):
+        if isinstance(module, RMSNorm):
             module.reset_parameters()
         elif isinstance(module, MixedFusedLayerNorm):
             torch.nn.init.ones_(module.weight)

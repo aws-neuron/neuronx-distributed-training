@@ -14,6 +14,7 @@
 
 """GPT-2 model."""
 
+import os
 import warnings
 
 import torch
@@ -54,7 +55,14 @@ def post_language_model_processing(
             assert lm_output.dtype == torch.half
             loss = parallel_cross_entropy(lm_output, labels)
         else:
-            loss = parallel_cross_entropy(lm_output.float(), labels)
+            # Upcast input to loss before calculation
+            original_lm_output_dtype = lm_output.dtype
+            if os.environ.get("XLA_DOWNCAST_BF16") == "1":
+                lm_output = lm_output.to(torch.double)
+            loss = parallel_cross_entropy(lm_output, labels)
+
+            # Down casting the final loss
+            loss = loss.to(original_lm_output_dtype)
 
         return loss, logits
 
