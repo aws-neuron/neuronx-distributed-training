@@ -10,10 +10,6 @@ Neuronx Distributed Training framework is built on top of
 a step-by-step instructions on how to setup the environment to run training using Neuronx Distributed Training
 framework.
 
-.. contents:: Table of contents
-   :local:
-   :depth: 2
-
 Setup a python virtual env
 --------------------------
 
@@ -32,7 +28,6 @@ Install the neuron packages using the command:
 
 .. code-block :: shell
 
-    pip install -U pip
     pip install --upgrade neuronx-cc==2.* torch-neuronx torchvision neuronx_distributed --extra-index-url https://pip.repos.neuron.amazonaws.com
 
 Building Apex
@@ -101,9 +96,6 @@ We can download the ``requirements.txt`` using the command:
 
     wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed-training/master/requirements.txt
 
-If you are using a U22 or later OS, please see `Common failures during installation`_,
-as these errors can happen during requirements installation.
-
 We can now install the dependencies of the library using the following command:
 
 .. code-block :: shell
@@ -121,7 +113,6 @@ To install the library, one can run the following command:
     pip install neuronx_distributed_training --extra-index-url https://pip.repos.neuron.amazonaws.com
 
 
-.. _nxdt_installation_common_failures:
 
 Common failures during installation
 -----------------------------------

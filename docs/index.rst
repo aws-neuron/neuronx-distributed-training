@@ -17,5 +17,6 @@ custom models built by users.
    :maxdepth: 2
    :caption: Contents:
 
+   Installation Guide </general/installation_guide>
    Features </general/features>
    Tutorials </tutorials/index>
