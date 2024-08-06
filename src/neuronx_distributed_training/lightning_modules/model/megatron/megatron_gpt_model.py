@@ -215,7 +215,7 @@ class MegatronGPTModel(MegatronBaseModel):
                 loss = loss / total_batches
                 if is_training:
                     loss.backward()
-                running_loss += loss.detach()
+                running_loss += norm_loss.detach()
         else:
             tokens, labels, loss_mask, _, position_ids = self.trainer.datamodule.process_global_batch(batch)
             fwd_bwd_fn = self.model.run_train if is_training else self.model.run_eval
