@@ -15,6 +15,8 @@ def process_config(cfg):
         set_env_variable("NEURON_FUSE_SOFTMAX", "1")
     if cfg.neuron_experimental_compress_rg is True:
         set_env_variable("NEURON_EXPERIMENTAL_COMPRESS_RG", "1")
+    else:
+        set_env_variable("NEURON_EXPERIMENTAL_COMPRESS_RG", "0")
     set_env_variable("NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS", str(cfg.aync_exec_max_inflight_requests))
     set_env_variable("BUCKET_CAP_MB", str(cfg.bucket_size_collectives))
     set_env_variable("NEURON_COMPILE_CACHE_URL", cfg.compiler_cache_url)
