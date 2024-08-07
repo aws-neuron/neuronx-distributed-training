@@ -41,6 +41,7 @@ class HFLLamaModule(BaseHfModel):
             config.hidden_size = self.config.model.get('hidden_size')
         if self.config.model.get('rope_theta', -1) != -1:
             config.rope_theta = self.config.model.get('rope_theta')
+        HF_LLAMA3_70B = "hf_llama3_70B"
 
         leaf_module_cls = [LlamaRMSNorm.__name__]
         activation_recompute_modules = []
