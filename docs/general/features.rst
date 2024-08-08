@@ -39,8 +39,8 @@ Modules
 1. `Grouped Query Attention layer <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
 2. Mixture of Experts (MoE)
 
-Precision
-----------
+Model/Optimizer Precision
+-------------------------
 
 To cater to different types of precision that can affect the overall training, the library provides an option to
 configure the following:
