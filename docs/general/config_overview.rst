@@ -59,7 +59,6 @@ and this key allows users to configure the ``trainer``.
     limit_val_batches: 1
     limit_test_batches: 1
     gradient_clip_val: 1.0
-    sequential_move_factor: 11
 
 .. note::
 
@@ -135,16 +134,6 @@ Float value to clip gradients at.
 
     * **Type**: float
     * **Required**: True
-
-
-**sequential_move_factor**
-
-Number of ranks/devices participating in initializing the model weights in parallel. Useful to reduce init time
-when using TP-PP config. The value can be increased upto the number of ``trainer.devices`` being used.
-
-    * **Default value**: 11
-    * **Type**: integer
-    * **Required**: False
 
 
 
@@ -301,7 +290,6 @@ Set this as the checkpoint file to load from. Check the SFT example config under
     * **Default**: null
     * **Required**: False
 
-.. _nxdt_config_distributed_strategy:
 
 Distributed Strategy
 --------------------
@@ -360,12 +348,11 @@ The sequence dimension will be sharded with the same degree as the ``tensor_mode
 **kv_replicator**
 
 This parameter is used together with ``qkv_linear`` parameter. It is used to configure the
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
 
     * **Type**: bool
     * **Required**: True
 
-.. _nxdt_config_data:
 
 Data
 ----
@@ -483,27 +470,10 @@ is common for all models supported in the library.
 **qkv_linear**
 
 This needs to be set if users want to use the
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
 
     * **Type**: bool
     * **Required**: True
-
-**fuse_qkv**
-
-This is set if users want to use fused q, k and v tensors in
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_ Using fuse_qkv can improve throughput.
-This parameter is True by default.
-
-    * **Type**: bool
-    * **Required**: False
-
-**pipeline_cuts**
-
-This is set as a list of layer names if users want to specify manual cut points for pipeline parallelism.
-One example is ['model.layers.10', 'model.layers.20'] in the case of PP=3.
-
-    * **Type**: List[str]
-    * **Required**: False
 
 **use_cpu_initialization**
 
@@ -751,8 +721,6 @@ Setting this parameter to ``True`` will add bias to each of the linear layers in
     * **Required**: True
 
 
-.. _nxdt_config_overview_precision_config:
-
 Precision
 ---------
 
@@ -805,9 +773,3 @@ To gain control of the different precision nobs, one can set the precision type 
 like - ``master_weights`` , ``fp32_grad_acc``, ``xla_use_bf16``, ``xla_downcast_bf16`` and
 ``neuron_rt_stochastic_rounding_en``.
 
-
-SFT-specific
--------------
-
-Follow :ref:`HuggingFace LLama3-8B Supervised Fine-tuning <hf_llama3_8B_SFT>` for SFT-specific
-config to enable finetuning.

@@ -19,4 +19,5 @@ custom models built by users.
 
    Installation Guide </general/installation_guide>
    Features </general/features>
+   YAML configuration </general/config_overview>
    Tutorials </tutorials/index>
