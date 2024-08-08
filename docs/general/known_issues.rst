@@ -155,18 +155,3 @@ It means there is some contention in compute/worker nodes to access the matlotli
 To resolve this add or run ``python -c 'import matplotlib.pyplot as plt'`` as part of your setup. This will
 create a matplotlib cache and avoid the race condition.
 
-Flash Attention not supported for megatron-style models
--------------------------------------------------------
-
-Flash attention kernel is supported only for HF-style models and will be added for megatron-style models in one of
-the future releases.
-
-During Dataset Download
-#######################
-
-If you are seeing an issue when downloading the datasets from the tutorials such as
-
-::
-    The maximum number of fds has been exceeded.
-
-We just need to increase the number of file descriptors with: `ulimit -n 65535`.

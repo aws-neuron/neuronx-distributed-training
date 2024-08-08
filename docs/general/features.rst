@@ -15,7 +15,11 @@ a model hub featuring end-to-end examples for state of the art models like LLama
 both HuggingFace and Megatron-LM model classes.
 
 The framework uses the distributed training technology from NxD. This allows the framework to support all the
-sharding techniques and Modules already supported by NxD. This includes:
+sharding techniques and Modules already supported by NxD.
+
+.. contents:: Table of contents
+   :local:
+   :depth: 2
 
 Distributed Techniques
 -----------------------

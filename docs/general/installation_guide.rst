@@ -10,6 +10,10 @@ Neuronx Distributed Training framework is built on top of
 a step-by-step instructions on how to setup the environment to run training using Neuronx Distributed Training
 framework.
 
+.. contents:: Table of contents
+   :local:
+   :depth: 2
+
 Setup a python virtual env
 --------------------------
 
@@ -113,6 +117,7 @@ To install the library, one can run the following command:
     pip install neuronx_distributed_training --extra-index-url https://pip.repos.neuron.amazonaws.com
 
 
+.. _nxdt_installation_common_failures:
 
 Common failures during installation
 -----------------------------------

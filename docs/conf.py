@@ -79,6 +79,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "local_documenter",
     "sphinx_copybutton",
+    "sphinx.ext.autosectionlabel",
 ]
 
 

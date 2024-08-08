@@ -21,3 +21,4 @@ custom models built by users.
    Features </general/features>
    YAML configuration </general/config_overview>
    Tutorials </tutorials/index>
+   Known Issues/Common Failures </general/known_issues>
