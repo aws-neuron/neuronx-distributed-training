@@ -149,6 +149,7 @@ post_show_prev_next = False
 post_auto_image = 1
 post_auto_excerpt = 2
 execution_show_tb = "READTHEDOCS" in os.environ
+autosectionlabel_prefix_document = True
 
 
 # Exclude private github from linkcheck. Readthedocs only exposes the ssh-agent to the 'checkout' build step, which is too early for the linkchecker to run.

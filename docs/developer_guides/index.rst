@@ -12,6 +12,4 @@ the Neuronx Distributed Training library.
     Integrating a new model <new_model_guide>
     Integrating a new dataset/dataloader <new_dataloader_guide>
     Registering an optimizer and LR scheduler <optimizer_lr_scheduler_flow>
-    Migrating from Neuron-NeMo-Megatron to Neuronx Distributed Training <migration_nnm_nxdt>
-    Migrating from NeMo to Neuronx Distributed Training <migration_nemo_nxdt>
 
