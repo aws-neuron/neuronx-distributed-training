@@ -41,26 +41,15 @@ class HFLLamaModule(BaseHfModel):
             config.hidden_size = self.config.model.get('hidden_size')
         if self.config.model.get('rope_theta', -1) != -1:
             config.rope_theta = self.config.model.get('rope_theta')
-        HF_LLAMA3_70B = "hf_llama3_70B"
 
         leaf_module_cls = [LlamaRMSNorm.__name__]
-        activation_recompute_modules = []
-        recompute_modules = self.config.model.get("activations_checkpoint_recompute", [])
-        granularity = self.config.model.get("activations_checkpoint_granularity", None)
-
-        if granularity == "selective":
-            for module in recompute_modules:
-                module_obj = getattr(sys.modules[__name__], module, None)
-                if module_obj is not None:
-                    activation_recompute_modules.append(module_obj)
-        elif granularity == "full":
-            activation_recompute_modules = "full"
-        elif not self.config.model.fusions.get("flash_attention", False):
-            activation_recompute_modules.append(CoreAttention) # do CoreAttention checkpointing if flash_attention is off
-        else:
-            activation_recompute_modules = None
-
-        self.nxd_config["activation_checkpoint_config"] = activation_recompute_modules
+        if self.config.model.get("activations_checkpoint_granularity", None) == "selective":
+            if self.config.model.get("activations_checkpoint_recompute_mlp", False) and self.config.model.encoder_seq_length>=8192:
+                self.nxd_config["activation_checkpoint_config"] = (CoreAttention, LlamaMLP)
+            else:
+                self.nxd_config["activation_checkpoint_config"] = CoreAttention
+        elif self.config.model.get("activations_checkpoint_granularity", None) == "full":
+            self.nxd_config["activation_checkpoint_config"] = "full"
         self.nxd_config["pipeline_config"].update(
             {
                 "transformer_layer_cls": LlamaDecoderLayer,
