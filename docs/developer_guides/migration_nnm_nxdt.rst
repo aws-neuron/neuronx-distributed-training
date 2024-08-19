@@ -123,7 +123,7 @@ There are the following differences in the model code:
     With NxDT, `NxD’s Activation Checkpoint wrapper <https://github.com/aws-neuron/neuronx-distributed/blob/main/src/neuronx_distributed/utils/activation_checkpoint.py>`_
     handles the recompute of the modules. Users just have to configure the ``activation_checkpoint_config`` inside
     ``nxd_config``
-    `here <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#initialize-nxd-core-config>`__.
+    `here <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#initialize-nxd-config>`__.
 
 
 Checkpointing Save/Load
@@ -131,7 +131,7 @@ Checkpointing Save/Load
 
 NxDT supports all the checkpointing features which NNM supports. This includes async checkpointing, auto-resume, etc.
 There are some differences in the format of the checkpoint. This is because NxDT uses
-`NxD’s checkpoint api <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#save-checkpoint>`_.
+`NxD’s checkpoint api <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#save-checkpoint>`_.
 The key differences are listed below:
 
 #.
@@ -140,7 +140,7 @@ The key differences are listed below:
     and the optimizer separately. The model ``statedict`` is saved in a folder of the form:
     ``model/dp_rank_00_tp_rank_00_pp_rank_00.pt`` and the optimizer is saved into a separate folder as:
     ``optim/dp_rank_00_tp_rank_00_pp_rank_00.pt``. This is mainly done so that when we use
-    `zero1 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#neuron-zero1-optimizer>`_,
+    `zero1 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html?highlight=zero1#neuron-zero1-optimizer>`_,
     each DP rank can save its own optimizer shard.
 
 #.

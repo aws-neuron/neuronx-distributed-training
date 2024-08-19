@@ -290,6 +290,7 @@ Set this as the checkpoint file to load from. Check the SFT example config under
     * **Default**: null
     * **Required**: False
 
+.. _nxdt_config_distributed_strategy:
 
 Distributed Strategy
 --------------------
@@ -353,6 +354,7 @@ This parameter is used together with ``qkv_linear`` parameter. It is used to con
     * **Type**: bool
     * **Required**: True
 
+.. _nxdt_config_data:
 
 Data
 ----
@@ -720,6 +722,8 @@ Setting this parameter to ``True`` will add bias to each of the linear layers in
     * **Type**: bool
     * **Required**: True
 
+
+.. _nxdt_config_overview_precision_config:
 
 Precision
 ---------
