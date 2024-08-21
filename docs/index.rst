@@ -17,9 +17,9 @@ custom models built by users.
    :maxdepth: 2
    :caption: Contents:
 
-   Installation Guide </general/installation_guide>
-   Features </general/features>
-   YAML Configuration </general/config_overview>
-   Developer Guides </developer_guides/index>
-   Tutorials </tutorials/index>
-   Known Issues/Common Failures </general/known_issues>
+   Installation Guide <general/installation_guide>
+   Features <general/features>
+   YAML Configuration <general/config_overview>
+   Developer Guides <developer_guides/index>
+   Tutorials <tutorials/index>
+   Known Issues/Common Failures <general/known_issues>
