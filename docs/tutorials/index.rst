@@ -7,4 +7,5 @@ This section will go over a bunch of tutorials to help users get started with Ne
 
 .. toctree::
     :maxdepth: 1
-    :hidden:
+
+    Megatron GPT Pretraining <megatron_gpt_pretraining>
