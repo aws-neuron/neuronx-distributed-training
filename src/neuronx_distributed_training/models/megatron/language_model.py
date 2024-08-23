@@ -581,7 +581,7 @@ class TransformerLanguageModel(MegatronModule):
         if self.output_router_logits:
             combined_output = encoder_output
             encoder_output = combined_output[0]
-            router_logits = combined_output[-1]
+            router_logits = combined_output[1]
 
         encoder_output = self.output_layer(encoder_output)
         return (encoder_output, router_logits) if self.output_router_logits else encoder_output

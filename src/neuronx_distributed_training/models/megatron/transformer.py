@@ -2554,8 +2554,9 @@ class ParallelTransformer(MegatronModule):
 
                 if self.output_router_logits:
                     # router logits will always be the last index of the returned tuple
-                    all_router_logits = hidden_states[-1]
-                    hidden_states = hidden_states[0]
+                    combined_output = hidden_states
+                    hidden_states = combined_output[0]
+                    all_router_logits = combined_output[1]
 
         # Final layer norm.
         if self.transformer_block_type != "post_ln":
