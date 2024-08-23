@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Transformer."""
+
 import datetime
 import math
 import os
@@ -180,7 +181,9 @@ class ParallelMLP(MegatronModule, adapter_mixins.AdapterModuleMixin):
         if transformer_block_type == "normformer":
             if normalization == "layernorm":
                 self.normalization = get_layer_norm(
-                    ffn_hidden_size // parallel_state.get_tensor_model_parallel_size(), layernorm_epsilon, persist_layer_norm
+                    ffn_hidden_size // parallel_state.get_tensor_model_parallel_size(),
+                    layernorm_epsilon,
+                    persist_layer_norm,
                 )
             elif normalization == "layernorm1p":
                 self.normalization = LayerNorm1P(
@@ -388,10 +391,10 @@ class NeuronSwitchMLP(MegatronModule):
         bias_activation_fusion=True,
         openai_gelu=False,
         onnx_safe=False,
-        activation='gelu',
+        activation="gelu",
         bias=True,
-        transformer_block_type='pre_ln',
-        normalization='layernorm',
+        transformer_block_type="pre_ln",
+        normalization="layernorm",
         layernorm_epsilon=1e-5,
         persist_layer_norm=False,
         sequence_parallel=False,
@@ -406,7 +409,7 @@ class NeuronSwitchMLP(MegatronModule):
         output_router_logits=False,
         expert_model_parallel_size=1,
         router_aux_loss_coef=0.02,
-        normalize_top_k_affinities=True
+        normalize_top_k_affinities=True,
     ):
         super(NeuronSwitchMLP, self).__init__()
 
@@ -417,19 +420,19 @@ class NeuronSwitchMLP(MegatronModule):
         assert transformer_block_type == "pre_ln"
 
         expert_mlps = ExpertMLPs(
-                num_experts=num_moe_experts,
-                top_k=moe_top_k, 
-                hidden_size=hidden_size,
-                intermediate_size=ffn_hidden_size,
-                hidden_act="silu" if activation == "swiglu" else activation,
-                glu_mlp=True,
-                capacity_factor=moe_capacity_factor,
-                normalize_top_k_affinities=normalize_top_k_affinities,
-                return_bias=False,
-                init_method=init_method,
-                output_layer_init_method=output_layer_init_method,
-                dtype=torch.float32,
-            )
+            num_experts=num_moe_experts,
+            top_k=moe_top_k,
+            hidden_size=hidden_size,
+            intermediate_size=ffn_hidden_size,
+            hidden_act="silu" if activation == "swiglu" else activation,
+            glu_mlp=True,
+            capacity_factor=moe_capacity_factor,
+            normalize_top_k_affinities=normalize_top_k_affinities,
+            return_bias=False,
+            init_method=init_method,
+            output_layer_init_method=output_layer_init_method,
+            dtype=torch.float32,
+        )
 
         if moe_routing_algorithm == "top_k":
             router = RouterTopK(
@@ -639,17 +642,20 @@ class CoreAttention(MegatronModule):
             # so that we can do rest of operation similar to non-gqa
             # query_layer:  [sq, b, np, hn] = [sq b (nk q_head) hn]
             # key_layer: [sk b nk hn] -> [sk b (nk q_head) hn]
-            # value_layer: [sk b nk hn] -> [sk b (nk q_head) hn]            
+            # value_layer: [sk b nk hn] -> [sk b (nk q_head) hn]
             query_layer = rearrange(
-                query_layer, 'sq b (nk q_head) hn -> b q_head nk sq hn', q_head=self.num_query_head_per_kv_head,
+                query_layer, "sq b (nk q_head) hn -> b q_head nk sq hn", q_head=self.num_query_head_per_kv_head
             )
-            key_layer = rearrange(key_layer, 'sk b nk hn -> b 1 nk hn sk')
-            value_layer = rearrange(value_layer, 'sk b nk hn -> b 1 nk sk hn')
+            key_layer = rearrange(key_layer, "sk b nk hn -> b 1 nk hn sk")
+            value_layer = rearrange(value_layer, "sk b nk hn -> b 1 nk sk hn")
 
-            attention_scores = torch.matmul(query_layer, key_layer, )
+            attention_scores = torch.matmul(
+                query_layer,
+                key_layer,
+            )
             if self.normalize_attention_scores:
                 attention_scores *= 1.0 / self.norm_factor
-            attention_scores = rearrange(attention_scores, 'b q_head nk sq sk -> b (q_head nk) sq sk')
+            attention_scores = rearrange(attention_scores, "b q_head nk sq sk -> b (q_head nk) sq sk")
         else:
             # After reshaping (repeating) the k/v matrices for GQA, attention operations are the same for GQA and non-GQA
             # [sq, b, np, hn] -> [sq, b * np, hn]
@@ -734,12 +740,13 @@ class CoreAttention(MegatronModule):
         if self.use_gqa:
             # GQA
             attention_probs = rearrange(
-                attention_probs, 'b (q_head nk) sq sk -> b q_head nk sq sk', q_head=self.num_query_head_per_kv_head,
+                attention_probs,
+                "b (q_head nk) sq sk -> b q_head nk sq sk",
+                q_head=self.num_query_head_per_kv_head,
             )
             context_layer = torch.matmul(attention_probs, value_layer)
-            context_layer = rearrange(context_layer, 'b q_head nk sq hn -> b (nk q_head) sq hn')
+            context_layer = rearrange(context_layer, "b q_head nk sq hn -> b (nk q_head) sq hn")
         else:
-
             # context layer shape: [b, np, sq, hn]
             output_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
@@ -1523,7 +1530,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         expert_model_parallel_size=1,
         router_aux_loss_coef=0.02,
         past_router_logits=None,
-        normalize_top_k_affinities=True
+        normalize_top_k_affinities=True,
     ):
         super(ParallelTransformerLayer_, self).__init__()
 
@@ -1809,7 +1816,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                 output_router_logits=output_router_logits,
                 expert_model_parallel_size=expert_model_parallel_size,
                 router_aux_loss_coef=router_aux_loss_coef,
-                normalize_top_k_affinities=normalize_top_k_affinities
+                normalize_top_k_affinities=normalize_top_k_affinities,
             )
         else:
             self.mlp = ParallelMLP(
@@ -2022,7 +2029,9 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         elif mlp_class == "NeuronSwitchMLP":
             mlp_output = self.mlp(normalization_output)
         else:
-            raise TypeError(f"MLP Layer type must be either ParallelMLP or NeuronSwitchMLP, got {type(self.mlp).__name__}.")
+            raise TypeError(
+                f"MLP Layer type must be either ParallelMLP or NeuronSwitchMLP, got {type(self.mlp).__name__}."
+            )
 
         residual = layernorm_input
 
@@ -2036,7 +2045,9 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         elif mlp_class == "ParallelMLP":
             output = bias_dropout_add_func(mlp_output, mlp_bias, residual, self.hidden_dropout)
         else:
-            raise TypeError(f"MLP Layer type must be either ParallelMLP or NeuronSwitchMLP, got {type(self.mlp).__name__}.")
+            raise TypeError(
+                f"MLP Layer type must be either ParallelMLP or NeuronSwitchMLP, got {type(self.mlp).__name__}."
+            )
 
         if self.transformer_block_type == "post_ln":
             output = self.post_attention_layernorm(output)
@@ -2057,15 +2068,14 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         if self.output_router_logits:
             # Concatenate the router logits with previous router logits
             if past_router_logits is not None:
-                if mlp_class ==  "NeuronSwitchMLP":
+                if mlp_class == "NeuronSwitchMLP":
                     router_logits = torch.cat((past_router_logits, mlp_output[-1]), dim=0)
                 else:
                     router_logits = past_router_logits
             else:
                 router_logits = mlp_output[-1]
 
-        # Return tuple of tuple due to NxD's pp tracing limitations
-        return ((output, router_logits), ) if self.output_router_logits else output
+        return (output, router_logits) if self.output_router_logits else output
 
 
 class ParallelTransformerLayer(ParallelTransformerLayer_):
@@ -2129,7 +2139,7 @@ class ParallelTransformerLayer(ParallelTransformerLayer_):
         expert_model_parallel_size=1,
         router_aux_loss_coef=0.02,
         past_router_logits=None,
-        normalize_top_k_affinities=True
+        normalize_top_k_affinities=True,
     ):
         super(ParallelTransformerLayer, self).__init__(
             init_method=init_method,
@@ -2190,7 +2200,7 @@ class ParallelTransformerLayer(ParallelTransformerLayer_):
             expert_model_parallel_size=expert_model_parallel_size,
             router_aux_loss_coef=router_aux_loss_coef,
             past_router_logits=past_router_logits,
-            normalize_top_k_affinities=normalize_top_k_affinities
+            normalize_top_k_affinities=normalize_top_k_affinities,
         )
 
         if precision == 32:
@@ -2328,7 +2338,7 @@ class ParallelTransformer(MegatronModule):
         output_router_logits=False,
         expert_model_parallel_size=1,
         router_aux_loss_coef=0.02,
-        normalize_top_k_affinities=True
+        normalize_top_k_affinities=True,
     ):
         super(ParallelTransformer, self).__init__()
 
@@ -2452,7 +2462,7 @@ class ParallelTransformer(MegatronModule):
                 output_router_logits=output_router_logits,
                 expert_model_parallel_size=expert_model_parallel_size,
                 router_aux_loss_coef=router_aux_loss_coef,
-                normalize_top_k_affinities=normalize_top_k_affinities
+                normalize_top_k_affinities=normalize_top_k_affinities,
             )
 
         self.layers = torch.nn.ModuleList([build_layer(i + 1) for i in range(self.num_layers)])
@@ -2544,8 +2554,8 @@ class ParallelTransformer(MegatronModule):
 
                 if self.output_router_logits:
                     # router logits will always be the last index of the returned tuple
-                    all_router_logits = hidden_states[0][-1]
-                    hidden_states = hidden_states[0][0]
+                    all_router_logits = hidden_states[-1]
+                    hidden_states = hidden_states[0]
 
         # Final layer norm.
         if self.transformer_block_type != "post_ln":
@@ -2554,5 +2564,4 @@ class ParallelTransformer(MegatronModule):
         if get_key_value:
             hidden_states = [hidden_states, presents]
 
-        # Return tuple of tuple due to NxD's pp tracing limitations
-        return ((hidden_states, all_router_logits),) if self.output_router_logits else hidden_states
+        return (hidden_states, all_router_logits) if self.output_router_logits else hidden_states
