@@ -134,6 +134,7 @@ class GPTModel(MegatronModule):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         normalize_top_k_affinities=True,
     ):
@@ -234,6 +235,7 @@ class GPTModel(MegatronModule):
             moe_top_k=moe_top_k,
             output_router_logits=output_router_logits,
             expert_model_parallel_size=expert_model_parallel_size,
+            token_shuffle_group_size=token_shuffle_group_size,
             router_aux_loss_coef=router_aux_loss_coef,
             normalize_top_k_affinities=normalize_top_k_affinities,
         )

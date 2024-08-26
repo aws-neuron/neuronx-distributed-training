@@ -131,6 +131,7 @@ class ModelModule:
             num_kv_heads=self.config.model.get("num_kv_heads", None),
             sliding_window=self.config.model.get("sliding_window_size", None),
             expert_model_parallel_size = self.config.distributed_strategy.get('expert_model_parallel_size', 1),
+            token_shuffle_group_size = self.config.distributed_strategy.get('token_shuffle_group_size', 1),
             num_moe_experts = num_moe_experts,
             moe_top_k = moe_top_k,
             moe_frequency = moe_config.get('frequency', 1),

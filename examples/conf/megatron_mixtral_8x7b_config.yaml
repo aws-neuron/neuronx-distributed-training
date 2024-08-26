@@ -48,6 +48,7 @@ distributed_strategy:
   zero1: True
   sequence_parallel: True
   expert_model_parallel_size: 1
+  token_shuffle_group_size: 1
 
 data:
   micro_batch_size: 1 # limited by GPU memory

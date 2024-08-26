@@ -408,6 +408,7 @@ class NeuronSwitchMLP(MegatronModule):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         normalize_top_k_affinities=True,
     ):
@@ -459,6 +460,7 @@ class NeuronSwitchMLP(MegatronModule):
             expert_mlps=expert_mlps,
             sequence_parallel_enabled=sequence_parallel,
             return_router_logits=output_router_logits,
+            token_shuffle_group_size=token_shuffle_group_size,
         )
 
     def forward(self, hidden_states):
@@ -1528,6 +1530,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         past_router_logits=None,
         normalize_top_k_affinities=True,
@@ -1815,6 +1818,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
                 moe_top_k=moe_top_k,
                 output_router_logits=output_router_logits,
                 expert_model_parallel_size=expert_model_parallel_size,
+                token_shuffle_group_size=token_shuffle_group_size,
                 router_aux_loss_coef=router_aux_loss_coef,
                 normalize_top_k_affinities=normalize_top_k_affinities,
             )
@@ -2137,6 +2141,7 @@ class ParallelTransformerLayer(ParallelTransformerLayer_):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         past_router_logits=None,
         normalize_top_k_affinities=True,
@@ -2198,6 +2203,7 @@ class ParallelTransformerLayer(ParallelTransformerLayer_):
             moe_top_k=moe_top_k,
             output_router_logits=output_router_logits,
             expert_model_parallel_size=expert_model_parallel_size,
+            token_shuffle_group_size=token_shuffle_group_size,
             router_aux_loss_coef=router_aux_loss_coef,
             past_router_logits=past_router_logits,
             normalize_top_k_affinities=normalize_top_k_affinities,
@@ -2337,6 +2343,7 @@ class ParallelTransformer(MegatronModule):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         normalize_top_k_affinities=True,
     ):
@@ -2461,6 +2468,7 @@ class ParallelTransformer(MegatronModule):
                 moe_top_k=moe_top_k,
                 output_router_logits=output_router_logits,
                 expert_model_parallel_size=expert_model_parallel_size,
+                token_shuffle_group_size=token_shuffle_group_size,
                 router_aux_loss_coef=router_aux_loss_coef,
                 normalize_top_k_affinities=normalize_top_k_affinities,
             )
