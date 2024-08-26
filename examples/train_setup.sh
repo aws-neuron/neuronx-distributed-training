@@ -40,6 +40,7 @@ then
     export EXPLICIT_LOGDIR=/shared/nemo_experiments/$POD_UID
     LOG_PATH=$EXPLICIT_LOGDIR/$NODEID/
     mkdir -p $LOG_PATH
+    export NEURON_COMPILE_CACHE_URL="/shared/neuron_cache" # Place cache on shared storage to reduce redundant compilations
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     export FI_EFA_FORK_SAFE=1
