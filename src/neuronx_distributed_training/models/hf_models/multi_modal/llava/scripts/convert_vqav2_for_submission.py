@@ -27,8 +27,9 @@ if __name__ == '__main__':
     for line_idx, line in enumerate(open(src)):
         try:
             results.append(json.loads(line))
-        except:
+        except ValueError as e:
             error_line += 1
+            print(f"Error parsing JSON line: {e}")
 
     results = {x['question_id']: x['text'] for x in results}
     test_split = [json.loads(line) for line in open(test_split)]

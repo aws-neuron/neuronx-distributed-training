@@ -6,7 +6,7 @@ import argparse
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from llava.model import *
+from llava.model import LlavaLlamaForCausalLM, LlavaConfig, LlavaMptForCausalLM, LlavaMptConfig
 from llava.model.utils import auto_upgrade
 
 
