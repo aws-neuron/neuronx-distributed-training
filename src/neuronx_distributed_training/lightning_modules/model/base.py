@@ -184,7 +184,8 @@ class BaseModelModule(NLPModel):
         # we zero grads here because we also call backward in the apex fwd/bwd functions
         self._optimizer.zero_grad()
 
-        loss_mean = self.forward_backward_step(batch, is_training=True)
+        with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
+            loss_mean = self.forward_backward_step(batch, is_training=True)
 
         with torch.no_grad():
             full_log = 0 == self.global_step % self.trainer.log_every_n_steps  # dump at least a partial log
