@@ -1,12 +1,12 @@
 .. _hf_llama3_8B_SFT:
 
-HuggingFace Llama3-8B Supervised Fine-tuning
+HuggingFace LLama3-8B Supervised Fine-tuning
 ============================================
 
-In this example, we will compile and finetune pre-trained HF Llama3-8B model
+In this example, we will compile and finetune pre-trained HF LLama3-8B model
 on a single instance with the ``NeuronxDistributedTraining`` library.
-The pre-trained Llama3-8B model serves as the foundation, and we will
-build upon this solid base by fine-tuning the model to adapt
+The pre-trained LLaMA3-8B model serves as the foundation, and we will build
+upon this solid base by fine-tuning the model to adapt
 it to a specific task or dataset.
 The example has the following main sections:
 
@@ -17,126 +17,36 @@ The example has the following main sections:
 Setting up the environment
 --------------------------
 
+ParallelCluster Setup
+^^^^^^^^^^^^^^^^^^^^^
+
+In this example, we will use 8 instances with ParallelCluster,
+please follow the instructions here to create a cluster:
+`Train your model on ParallelCluster
+<https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/devflows/training/parallelcluster/parallelcluster-training.html>`_
+
+ParallelCluster automates the creation of trn1 clusters,
+and provides the SLURM job management system for scheduling and managing distributed training jobs.
+Please note that the home directory on your ParallelCluster
+head node will be shared with all of the worker nodes via NFS.
+
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
-Please follow this guide on how to install the latest Neuron packages:
+Once you have launched a trn1 instance or ParallelCluster,
+please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
 Next, we will need to install ``NeuronxDistributedTraining`` and its dependencies.
 Please see the following installation guide for installing ``NeuronxDistributedTraining``:
-:ref:`NxDT Installation Guide <nxdt_installation_guide>`.
-
-
-SFT-YAML Configuration Overview
--------------------------------
-
-You can configure a variety of SFT-specific and model parameters for finetuning through the YAML file.
-
-.. code-block:: yaml
-
-    exp_manager:
-        resume_from_checkpoint: /pretrained_ckpt
-
-    data:
-        train_dir: /example_datasets/llama3_8b/training.jsonl
-        val_dir: /example_datasets/llama3_8b/validation.json
-        dev_choose_samples: 2250
-        seq_length: 4096
-        alignment_strategy:
-            sft:
-                packing: True
-        tokenizer:
-            type: /llama3_tokenizer
-
-    model:
-        weight_init_only: True
-
-
-**exp_manager**
-    **resume_from_checkpoint**
-
-    Manually set the checkpoint file (pretrained checkpoint) to load from
-
-        * **Type**: str
-        * **Default**: ``/pretrained_ckpt``
-        * **Required**: True (start with pretrained checkpoint)
-
-**data**
-
-    **train_dir**
-
-    SFT training data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
-
-        * **Type**: str
-        * **Required**: True
-
-    **val_dir**
-
-    SFT validation data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
-
-        * **Type**: str
-        * **Required**: False
-
-    **dev_choose_samples**
-
-    If set, will use that many number of records from the
-    head of the dataset instead of using all. Set to null to use full dataset
-
-        * **Type**: integer
-        * **Default**: null
-        * **Required**: False
-
-    **seq_length**
-
-    Set sequence length for the training job
-
-        * **Type**: integer
-        * **Required**: True
-
-    **alignment_strategy**
-
-    Set only when using finetuning specific algorithms (SFT, DPO, etc) and related hyperparameters
-    SFT-specific parameters.
-
-        **sft**
-            **packing**
-
-            Appends multiple records in a single record until seq length
-            supported by model, if false uses pad tokens to reach seq length.
-            Setting it to True increases throughput but might impact accuracy.
-
-                * **Type**: bool
-                * **Default**: False
-                * **Required**: False
-
-    **tokenizer**
-        **type**
-
-        Set tokenizer path/type
-
-            * **Type**: str
-            * **Default**: ``/llama3_tokenizer``
-            * **Required**: True
-
- **model**
-        **weight_init_only**
-
-        Load only model states and ignore the optim states from ckpt directory
-
-            * **Type**: bool
-            * **Default**: True
+:ref:`NxDT Installation Guide <nxdt_installation_guide>`
 
 
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of `databricks-dolly` instruction-following
+This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
 dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
 by running the following commands on the head node or your trn1 instance:
 
@@ -151,31 +61,10 @@ by running the following commands on the head node or your trn1 instance:
 Download pretrained model checkpoint and tokenizer
 --------------------------------------------------
 
-In this tutorial, we will use a pretrained Llama3-8B checkpoint from the original repository.
-Follow the steps to download tokenizer and model checkpoint from
-the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
-
-Create a folder ``llama3_tokenizer`` and copy the tokenizer contents to it.
-
-Modify the following paths in YAML file based on your specific directory configuration:
-
-1. ``model.model_config``
-2. ``exp_manager.resume_from_checkpoint``
-3. ``tokenizer.type``
-4. ``train_dir`` and ``val_dir``
-
-You can use your custom model, pretrained checkpoint and tokenizer by
-modifying the ``hf_llama3_8B_SFT_config.yaml`` file.
+In this tutorial, we will use a pretrained llama3-8B checkpoint from the original repository.
+Follow the steps to download tokenizer and model checkpoint from the pretraining stage: https://llama.meta.com/llama-downloads/
 
 
-Checkpoint Conversion
-^^^^^^^^^^^^^^^^^^^^^
-
-Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
-HF-style Llama3-8B checkpoint
-to NxDT supported format and store it in  ``pretrained_ckpt`` directory.
-Modify the config parameter ``exp_manager.resume_from_checkpoint`` path to the
-converted pretrained checkpoint path.
 
 Pre-compile the model
 ---------------------
@@ -209,7 +98,7 @@ Next, run the following commands to launch an AOT pre-compilation job on your in
     ./train.sh
 
 The compile output and logs will be shown directly in the terminal
-and you will see logs similar to this:
+and you will see a message similar to this:
 
 .. code-block:: bash
 
@@ -227,7 +116,7 @@ Then, you know your compilation has successfully completed.
 Training the model
 ------------------
 
-The pre-training job is launched almost exactly in the same way as the compile job.
+The pre-training job is launched almost exactly the same as the compile job.
 We now turn off the ``COMPILE`` environment variable and
 run the same training script to start pre-training.
 
@@ -281,7 +170,8 @@ neuron-top / neuron-monitor / neuron-ls
 
 The `neuron-top <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/tools/neuron-sys-tools/neuron-top-user-guide.html>`_
 tool can be used to view useful information about NeuronCore utilization, vCPU and RAM utilization,
-and loaded graphs on a per-node basis. To use neuron-top during on ongoing training job, run ``neuron-top``:
+and loaded graphs on a per-node basis. To use neuron-top during on ongoing training job,
+first SSH into one of your compute nodes from the head node (if using ParallelCluster), and then run ``neuron-top``:
 
 .. code-block:: bash
 
