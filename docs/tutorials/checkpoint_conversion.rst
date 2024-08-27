@@ -1,4 +1,4 @@
-.. _checkpoint-conversion:
+.. _checkpoint_conversion:
 
 Checkpoint Conversion
 =====================
