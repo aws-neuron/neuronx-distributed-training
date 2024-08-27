@@ -46,8 +46,8 @@ Please see the following installation guide for installing ``NeuronxDistributedT
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of databricks-dolly instruction-following 
-dataset that is stored in S3. The dataset can be downloaded to your cluster or instance 
+This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
+dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
 by running the following commands on the head node or your trn1 instance:
 
 .. code-block:: bash
@@ -189,4 +189,3 @@ Troubleshooting Guide
 
 For issues with ``NeuronxDistributedTraining``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`
-

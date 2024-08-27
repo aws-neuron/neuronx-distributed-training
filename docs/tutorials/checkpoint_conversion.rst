@@ -129,4 +129,3 @@ This command will create an NxDT checkpoint sharded with (tp=8, pp=4) like:
   ...........................................................................
   -rw-r--r-- 1 user group 789 Aug 27 2024 dp_rank_00_tp_rank_07_pp_rank_02.pt
   -rw-r--r-- 1 user group 122 Aug 27 2024 dp_rank_00_tp_rank_07_pp_rank_03.pt
-  
