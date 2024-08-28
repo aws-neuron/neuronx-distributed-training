@@ -3,11 +3,9 @@
 HuggingFace LLama3-8B Supervised Fine-tuning
 ============================================
 
-In this example, we will compile and finetune pre-trained HF LLama3-8B model
-on a single instance with the ``NeuronxDistributedTraining`` library.
-The pre-trained LLaMA3-8B model serves as the foundation, and we will build
-upon this solid base by fine-tuning the model to adapt
-it to a specific task or dataset.
+In this example, we will compile and finetune pre-trained HF LLama3-8B model on a single instance with the ``NeuronxDistributedTraining`` library.
+The pre-trained LLaMA3-8B model serves as the foundation, and we will build upon this solid base by fine-tuning the model to adapt
+it to a specific task or dataset. 
 The example has the following main sections:
 
 .. contents:: Table of contents
@@ -16,19 +14,6 @@ The example has the following main sections:
 
 Setting up the environment
 --------------------------
-
-ParallelCluster Setup
-^^^^^^^^^^^^^^^^^^^^^
-
-In this example, we will use 8 instances with ParallelCluster,
-please follow the instructions here to create a cluster:
-`Train your model on ParallelCluster
-<https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/devflows/training/parallelcluster/parallelcluster-training.html>`_
-
-ParallelCluster automates the creation of trn1 clusters,
-and provides the SLURM job management system for scheduling and managing distributed training jobs.
-Please note that the home directory on your ParallelCluster
-head node will be shared with all of the worker nodes via NFS.
 
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
@@ -46,8 +31,8 @@ Please see the following installation guide for installing ``NeuronxDistributedT
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
-dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
+This tutorial makes use of a preprocessed version of databricks-dolly instruction-following 
+dataset that is stored in S3. The dataset can be downloaded to your cluster or instance 
 by running the following commands on the head node or your trn1 instance:
 
 .. code-block:: bash
@@ -62,9 +47,20 @@ Download pretrained model checkpoint and tokenizer
 --------------------------------------------------
 
 In this tutorial, we will use a pretrained llama3-8B checkpoint from the original repository.
-Follow the steps to download tokenizer and model checkpoint from the pretraining stage: https://llama.meta.com/llama-downloads/
+Follow the steps to download tokenizer and model checkpoint from 
+the pretraining stage: `https://llama.meta.com/llama-downloads/`
 
+Create a folder `/llama3_tokenizer` and copy the tokenizer contents to it.
 
+You can use your custom model, pretrained checkpoint and tokenizer by modifying ``hf_llama3_8B_SFT_config.yaml`` file, simply change:
+1. `model_config` 
+2. `resume_from_checkpoint` 
+3. `tokenizer.type`
+
+Checkpoint Conversion
+^^^^^^^^^^^^^^^^^^^^^
+Follow this :ref:`Checkpoint Conversion Guide <checkpoint-conversion>` to convert the HF-style llama3-8B checkpoint 
+to NxDT supported format and store it in  `/pretrained_ckpt/` directory. 
 
 Pre-compile the model
 ---------------------
@@ -189,3 +185,4 @@ Troubleshooting Guide
 
 For issues with ``NeuronxDistributedTraining``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`
+
