@@ -67,10 +67,10 @@ You can configuring a bunch of SFT-specific and model parameters for finetuning 
 
     Appends multiple records in a single record until seq length
     supported by model, if false uses pad tokens to reach seq length.
-    Setting it to True increases throughput
+    Setting it to True increases throughput but might impact accuracy.
 
         * **Type**: bool
-        * **Default**: True
+        * **Default**: False
         * **Required**: False
 
     **use_sft_data_module**
@@ -103,7 +103,7 @@ You can configuring a bunch of SFT-specific and model parameters for finetuning 
     head of the dataset instead of using all. Set to null to use full dataset
 
         * **Type**: integer
-        * **Default**: 2250
+        * **Default**: null
         * **Required**: False
 
     **seq_length**

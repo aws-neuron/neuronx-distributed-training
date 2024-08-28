@@ -37,7 +37,7 @@ Run the following commands from the ``/examples/checkpoint_conversion_scripts/``
    2. If your HF/custom checkpoint has multiple `.bin` or `.pt` files
       then merge and convert to a single file before conversion.
 
-For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`
+For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`.
 
 1. **HF style model**:
 
