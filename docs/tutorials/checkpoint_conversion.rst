@@ -117,7 +117,8 @@ Convert the HF-style checkpoint to an NXDT checkpoint on a single instance:
 
   python3 checkpoint_converter.py --model_style hf --input_dir /hf/checkpoint/pytorch_model.bin --output_dir /nxdt/checkpoint --save_xser True --convert_from_full_state --config /path/to/config.json --tp_size 8 --pp_size 4 --n_layers 32 --kv_size_multiplier 1 --qkv_linear True --convert_from_full_state
 
-This command will create an NxDT checkpoint in `output_dir: /nxdt/checkpoint` and it will be sharded with (tp=8, pp=4) like:
+This command will create an NxDT checkpoint in `output_dir: /nxdt/checkpoint`
+and it will be sharded with (tp=8, pp=4) like:
 
 .. code-block:: bash
 
