@@ -49,7 +49,7 @@ Download pretrained model checkpoint and tokenizer
 
 In this tutorial, we will use a pretrained llama3-8B checkpoint from the original repository.
 Follow the steps to download tokenizer and model checkpoint from
-the pretraining stage: `https://llama.meta.com/llama-downloads/`
+the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
 
 Create a folder `/llama3_tokenizer` and copy the tokenizer contents to it.
 
