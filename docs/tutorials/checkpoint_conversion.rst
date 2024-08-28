@@ -7,7 +7,7 @@ Checkpoint Conversion
    :local:
    :depth: 2
 
-The ``NeuronxDistributedTraining (NxDT)`` library provides a versatile checkpoint conversion functionality,
+The  ``NeuronxDistributedTraining (NxDT)`` library provides a versatile checkpoint conversion functionality,
 allowing seamless transition between different model styles. This tutorial aims to provide a
 comprehensive guide through the various use cases and demonstrate how to perform the checkpoint conversions.
 
@@ -27,6 +27,15 @@ Conversion Scenarios and Usage
 The tool supports the following conversion scenarios. It internally
 uses ``NeuronxDistributed (NxD)`` to convert to/from checkpoints.
 Run the following commands from the ``/examples/checkpoint_conversion_scripts/`` directory:
+
+.. note::
+
+   1. Please ensure that the model configuration `config.json` file is present,
+      as it is required for checkpoint conversions.
+      If not present, you will need to create it.
+
+   2. If your HF/custom checkpoint has multiple `.bin` or `.pt` files
+      then merge and convert to a single file before conversion.
 
 For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`
 
@@ -87,7 +96,7 @@ The `checkpoint_converter.py` script supports the following key arguments:
 - `--load_xser`: Loads the checkpoint with torch_xla serialization
 - `--convert_from_full_state`: Converts full model checkpoint to sharded model checkpoint
 - `--convert_to_full_state`: Converts sharded model checkpoint to full model checkpoint
-- `--config`: path to the model configuration file
+- `--config`: path to the model configuration file (create `json` file if not present)
 - `--tp_size`: tensor parallelism degree
 - `--pp_size`: pipeline parallelism degree
 - `--n_layers`: number of layers in the model

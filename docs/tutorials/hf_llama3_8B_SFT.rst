@@ -29,6 +29,108 @@ Please see the following installation guide for installing ``NeuronxDistributedT
 :ref:`NxDT Installation Guide <nxdt_installation_guide>`
 
 
+SFT-YAML Configuration Overview
+-------------------------------
+
+You can configuring a bunch of SFT-specific and model parameters for finetuning through the YAML file.
+
+.. code-block:: yaml
+
+    exp_manager:
+        resume_from_checkpoint: /pretrained_ckpt
+
+    data:
+        packing: True
+        use_sft_data_module: True
+        train_dir: /example_datasets/llama3_8b/training.jsonl
+        validation_dir: /example_datasets/llama3_8b/validation.json
+        dev_choose_samples: 2250
+        seq_length: 4096
+        tokenizer:
+            type: /llama3_tokenizer
+
+    model:
+        weight_init_only: True
+
+
+**exp_manager**
+    **resume_from_checkpoint**
+
+    Manually set the checkpoint file (pretrained checkpoint) to load from
+
+        * **Type**: str
+        * **Default**: `/pretrained_ckpt`
+        * **Required**: True (start with pretrained checkpoint)
+
+**data**
+    **packing**
+
+    Appends multiple records in a single record until seq length
+    supported by model, if false uses pad tokens to reach seq length.
+    Setting it to True increases throughput
+
+        * **Type**: bool
+        * **Default**: True
+        * **Required**: False
+
+    **use_sft_data_module**
+
+    Use HF-SFT style SFT custom dataloader with HF style data file paths.
+
+        * **Type**: bool
+        * **Default**: True
+        * **Required**: True
+
+    **train_dir**
+
+    SFT training data - jsonl or arrow file
+    As for SFT we use HF style dataloader, we also use HF style data file paths
+
+        * **Type**: str
+        * **Required**: True
+
+    **val_dir**
+
+    SFT validation data - jsonl or arrow file
+    As for SFT we use HF style dataloader, we also use HF style data file paths
+
+        * **Type**: str
+        * **Required**: True
+
+    **dev_choose_samples**
+
+    if set, will use those many number of records from the
+    head of the dataset instead of using all. Set to null to use full dataset
+
+        * **Type**: integer
+        * **Default**: 2250
+        * **Required**: False
+
+    **seq_length**
+
+    Set sequence length for the training job
+
+        * **Type**: integer
+        * **Required**: True
+
+    **tokenizer**
+        **type**
+
+        Set tokenizer path/type
+
+            * **Type**: str
+            * **Default**: `/llama3_tokenizer`
+            * **Required**: True
+
+ **model**
+        **weight_init_only**
+
+        Load only model states and ignore the optim states from ckpt directory
+
+            * **Type**: bool
+            * **Default**: True
+
+
 Download the dataset
 --------------------
 
@@ -53,18 +155,23 @@ the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
 
 Create a folder `/llama3_tokenizer` and copy the tokenizer contents to it.
 
-You can use your custom model, pretrained checkpoint and tokenizer by
-modifying ``hf_llama3_8B_SFT_config.yaml`` file, simply change:
+Modify the following paths in YAML file based on your specific directory configuration:
 
-1. `model_config`
-2. `resume_from_checkpoint`
+1. `model.model_config`
+2. `exp_manager.resume_from_checkpoint`
 3. `tokenizer.type`
+4. `train_dir` and `val_dir`
+
+You can use your custom model, pretrained checkpoint and tokenizer by
+modifying ``hf_llama3_8B_SFT_config.yaml`` file.
+
 
 Checkpoint Conversion
 ^^^^^^^^^^^^^^^^^^^^^
 Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
 HF-style llama3-8B checkpoint
 to NxDT supported format and store it in  `/pretrained_ckpt/` directory.
+Modify the `exp_manager.resume_from_checkpoint` path to the pretrained checkpoint path.
 
 Pre-compile the model
 ---------------------

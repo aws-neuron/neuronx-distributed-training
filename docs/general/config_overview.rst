@@ -777,3 +777,9 @@ To gain control of the different precision nobs, one can set the precision type 
 like - ``master_weights`` , ``fp32_grad_acc``, ``xla_use_bf16``, ``xla_downcast_bf16`` and
 ``neuron_rt_stochastic_rounding_en``.
 
+
+SFT-specific
+-------------
+
+Follow :ref:`HuggingFace LLama3-8B Supervised Fine-tuning <hf_llama3_8B_SFT>` for SFT-specific
+config to enable finetuning.
