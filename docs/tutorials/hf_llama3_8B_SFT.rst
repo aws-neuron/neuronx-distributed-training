@@ -55,6 +55,7 @@ Create a folder `/llama3_tokenizer` and copy the tokenizer contents to it.
 
 You can use your custom model, pretrained checkpoint and tokenizer by
 modifying ``hf_llama3_8B_SFT_config.yaml`` file, simply change:
+
 1. `model_config`
 2. `resume_from_checkpoint`
 3. `tokenizer.type`
