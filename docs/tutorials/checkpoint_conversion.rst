@@ -28,6 +28,8 @@ The tool supports the following conversion scenarios. It internally
 uses ``NeuronxDistributed (NxD)`` to convert to/from checkpoints.
 Run the following commands from the ``/examples/checkpoint_conversion_scripts/`` directory:
 
+For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`
+
 1. **HF style model**:
 
    a. **HF to NxDT checkpoint**:
@@ -52,17 +54,7 @@ Run the following commands from the ``/examples/checkpoint_conversion_scripts/``
 
 2. **Megatron style model (non-GQA models: e.g., LLaMA-2, and GQA models: e.g., LLaMA-3)**:
 
-   a. **NxDT Megatron checkpoint to HF**:
-
-    **Command**:
-
-    .. code-block:: bash
-
-       python3 checkpoint_converter.py  --model_style megatron --input_dir ~/examples/nemo_experiments/megatron_llama/2024-07-23_21-07-30/checkpoints/megatron_llama--step=5-consumed_samples=5120.0.ckpt/model --output_dir ~/megatron-tp8pp4-nxdt-to-hf4 --load_xser True --config ~/llama_gqa/config.json --tp_size 8 --pp_size 4 --kv_size_multiplier 1 --qkv_linear True --convert_to_full_state
-
-    This converts an NxDT Megatron-style checkpoint to an HF-style checkpoint (GQA-based model, see: `--qkv_linear` set to `True`).
-
-   b. **HF to NxDT Megatron checkpoint**:
+   a. **HF to NxDT Megatron checkpoint**:
 
     **Command**:
 
@@ -72,16 +64,25 @@ Run the following commands from the ``/examples/checkpoint_conversion_scripts/``
 
     This converts an HF-style checkpoint to an NxDT Megatron-style checkpoint.
 
-  For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`
+   b. **NxDT Megatron checkpoint to HF**:
+
+    **Command**:
+
+    .. code-block:: bash
+
+       python3 checkpoint_converter.py  --model_style megatron --input_dir ~/examples/nemo_experiments/megatron_llama/2024-07-23_21-07-30/checkpoints/megatron_llama--step=5-consumed_samples=5120.0.ckpt/model --output_dir ~/megatron-tp8pp4-nxdt-to-hf4 --load_xser True --config ~/llama_gqa/config.json --tp_size 8 --pp_size 4 --kv_size_multiplier 1 --qkv_linear True --convert_to_full_state
+
+    This converts an NxDT Megatron-style checkpoint to an HF-style checkpoint (GQA-based model, see: `--qkv_linear` set to `True`).
+
 
 Key Arguments
 ^^^^^^^^^^^^^
 
 The `checkpoint_converter.py` script supports the following key arguments:
 
-- `--model_style`: Specifies the model style, either `hf` (HuggingFace) or `megatron`
-- `--input_dir`: directory containing the input checkpoint
-- `--output_dir`: directory to save the converted checkpoint directory
+- `--model_style`: Specifies the model style, either `hf` (HuggingFace: default) or `megatron`
+- `--input_dir`: (required) directory containing the input checkpoint
+- `--output_dir`: (required) directory to save the converted checkpoint directory
 - `--save_xser`: Saves the checkpoint with torch_xla serialization
 - `--load_xser`: Loads the checkpoint with torch_xla serialization
 - `--convert_from_full_state`: Converts full model checkpoint to sharded model checkpoint
@@ -100,7 +101,7 @@ and vice versa.
 Conversion Example
 ------------------
 
-Assuming you have a pre-trained HF-style LLaMA-3.8B model checkpoint looking similar to:
+Assuming you have a pre-trained HF-style LLama3-8B model checkpoint looking similar to:
 
 `input_dir: /hf/checkpoint/pytorch_model.bin`
 
@@ -116,9 +117,7 @@ Convert the HF-style checkpoint to an NXDT checkpoint on a single instance:
 
   python3 checkpoint_converter.py --model_style hf --input_dir /hf/checkpoint/pytorch_model.bin --output_dir /nxdt/checkpoint --save_xser True --convert_from_full_state --config /path/to/config.json --tp_size 8 --pp_size 4 --n_layers 32 --kv_size_multiplier 1 --qkv_linear True --convert_from_full_state
 
-This command will create an NxDT checkpoint sharded with (tp=8, pp=4) like:
-
-`output_dir: /nxdt/checkpoint`
+This command will create an NxDT checkpoint in `output_dir: /nxdt/checkpoint` and it will be sharded with (tp=8, pp=4) like:
 
 .. code-block:: bash
 

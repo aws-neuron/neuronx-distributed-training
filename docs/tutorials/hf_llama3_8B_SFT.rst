@@ -5,7 +5,7 @@ HuggingFace LLama3-8B Supervised Fine-tuning
 
 In this example, we will compile and finetune pre-trained HF LLama3-8B model
 on a single instance with the ``NeuronxDistributedTraining`` library.
-The pre-trained LLaMA3-8B model serves as the foundation, and we will
+The pre-trained LLama3-8B model serves as the foundation, and we will
 build upon this solid base by fine-tuning the model to adapt
 it to a specific task or dataset.
 The example has the following main sections:
@@ -97,7 +97,7 @@ Next, run the following commands to launch an AOT pre-compilation job on your in
     ./train.sh
 
 The compile output and logs will be shown directly in the terminal
-and you will see a message similar to this:
+and you will see logs similar to this:
 
 .. code-block:: bash
 
