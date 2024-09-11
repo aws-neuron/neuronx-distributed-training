@@ -792,3 +792,4 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             attentions=outputs.attentions,
         )
 
+
