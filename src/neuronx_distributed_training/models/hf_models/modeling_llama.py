@@ -263,8 +263,7 @@ class LlamaAttention(LlamaAttentionHF):
         if not hasattr(config, "qkv_linear"):
             config.qkv_linear = False
 
-        if not hasattr(config, "separate_qkv"):
-            config.separate_qkv = False
+        config.fuse_qkv = getattr(config, "fuse_qkv", False)
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -274,7 +273,7 @@ class LlamaAttention(LlamaAttentionHF):
         self._init_rope()
 
         init_method = partial(_init_normal, config.initializer_range)
-        if not self.config.separate_qkv and self.num_heads == self.num_key_value_heads:
+        if self.config.fuse_qkv and self.num_heads == self.num_key_value_heads and not self.config.qkv_linear:
             self.qkv_proj = ColumnParallelLinear(
                 self.hidden_size,
                 3 * self.num_heads * self.head_dim,
@@ -294,6 +293,7 @@ class LlamaAttention(LlamaAttentionHF):
                 init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
                 kv_size_multiplier=self.config.kv_shared_group_size,
+                fuse_qkv=self.config.fuse_qkv,
             )
         else:
             self.q_proj = ColumnParallelLinear(
@@ -372,7 +372,7 @@ class LlamaAttention(LlamaAttentionHF):
 
         else:
             if (
-                not self.config.separate_qkv
+                self.config.fuse_qkv
                 and self.num_heads == self.num_key_value_heads
                 and self.config.kv_shared_group_size == 1
             ):

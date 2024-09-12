@@ -477,6 +477,14 @@ This needs to be set if users want to use the
     * **Type**: bool
     * **Required**: True
 
+**fuse_qkv**
+
+This flags enables qkv fusion, which improves performance, in the
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
+
+    * **Type**: bool
+    * **Required**: False
+
 **use_cpu_initialization**
 
 Setting this flag to ``True`` will initialize the weights on ``CPU`` and then move to device. It is recommended to set

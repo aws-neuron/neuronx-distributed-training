@@ -27,6 +27,7 @@ class HFLLamaModule(BaseHfModel):
         config.return_dict = False
         config.sequence_parallel_enabled = self.config.distributed_strategy.get("sequence_parallel", False)
         config.qkv_linear = self.config.model.get("qkv_linear", False)
+        config.fuse_qkv = self.config.model.get("fuse_qkv", False)
         config.kv_shared_group_size = self.config.distributed_strategy.get("kv_replicator", 1)
         config.max_position_embeddings = max(config.max_position_embeddings, self.config.model.get("max_position_embeddings"))
         config.use_flash_attention = self.config.model.fusions.flash_attention
