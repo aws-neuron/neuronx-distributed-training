@@ -334,8 +334,12 @@ class BaseModelModule(NLPModel):
         # TODO: Needs override
         device = xm.xla_device()
         running_loss = torch.zeros(1, device=device)
+        pipeline_config = self.nxd_config.get("pipeline_config", None)
+        input_names = None
+        if pipeline_config:
+            input_names = pipeline_config.get("input_names", None)
         if parallel_state.get_pipeline_model_parallel_size() == 1:
-            batch_for_pipeline = self.get_batch_iterator(self.process_global_batch(batch))
+            batch_for_pipeline = self.get_batch_iterator(self.trainer.datamodule.process_global_batch(batch, input_names))
             total_batches = len(batch_for_pipeline)
             for batch in batch_for_pipeline:
                 output = self.model(**batch)
@@ -348,7 +352,7 @@ class BaseModelModule(NLPModel):
                     loss.backward()
                 running_loss += loss.detach()
         else:
-            batch = self.process_global_batch(batch)
+            batch = self.trainer.datamodule.process_global_batch(batch, input_names)
             fwd_bwd_fn = self.model.run_train if is_training else self.model.run_eval
             output = fwd_bwd_fn(**batch)
             if parallel_state.get_pipeline_model_parallel_rank() == (

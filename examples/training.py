@@ -28,6 +28,9 @@ from neuronx_distributed_training.lightning_modules.data.sft_data_module import 
 from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
     HFLLamaModule,
 )
+from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
+    HFMixtralModule,
+)
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
     NLPDDPStrategy,
@@ -80,7 +83,10 @@ def train(cfg) -> None:
             data_module = SFTDataModule(cfg, trainer)
         else:
             data_module = HFDataModule(cfg, trainer)
-        model = HFLLamaModule(cfg, trainer)        
+        if "mixtral" in cfg.name:
+            model = HFMixtralModule(cfg, trainer)
+        else:
+            model = HFLLamaModule(cfg, trainer) 
     else:
         raise NotImplementedError
     trainer.fit(model, datamodule=data_module)
