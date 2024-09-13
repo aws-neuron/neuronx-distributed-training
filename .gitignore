@@ -138,4 +138,3 @@ src/neuron_training_toolkit.egg-info
 *.whl
 **/.DS_Store
 __pycache__
-src/neuronx_distributed_training/models

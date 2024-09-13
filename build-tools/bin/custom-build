@@ -5,7 +5,6 @@ BUILD_PATH=build/
 WHL_BUILD_PATH=${BUILD_PATH}/neuronx-distributed-training
 LICENSE_TXT_PATH=${BUILD_PATH}/private/LICENSE.txt
 REQUIREMENTS_TXT_PATH=requirements.txt
-NXDM_PATH=${BUILD_PATH}/private/models/
 
 export TOOL_VERBOSE=true
 
@@ -25,7 +24,6 @@ cp -r src/ ${WHL_BUILD_PATH}/
 cp ${LICENSE_TXT_PATH} ${WHL_BUILD_PATH}/src/neuronx_distributed_training/LICENSE.txt
 cp ${REQUIREMENTS_TXT_PATH} ${BUILD_PATH}/
 cp -r examples ${BUILD_PATH}/
-cp -r ${NXDM_PATH} src/neuronx_distributed_training/
 
 bash ./build.sh
 rm -r  ${BUILD_PATH}/doctrees

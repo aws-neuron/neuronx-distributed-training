@@ -15,8 +15,8 @@ package.NeuronxDistributedTraining = {
             Python3PBuildTool = 2.0;
             Python-setuptools = default;
             NeuronLicense = 1.0;
-            Neuronx-Distributed-Models = 1.0;
         };
     };
+
 };
 
