@@ -476,7 +476,8 @@ class LlamaModel(LlamaModelHF):
 
         init_method = partial(_init_normal, config.initializer_range)
         self.embed_tokens = ParallelEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method
+            config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method,
+            sequence_parallel_enabled=config.sequence_parallel_enabled
         )
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(
@@ -577,10 +578,6 @@ class LlamaModel(LlamaModelHF):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        if self.config.sequence_parallel_enabled:
-            hidden_states = hidden_states.transpose(0, 1).contiguous()
-            hidden_states = mappings.scatter_to_sequence_parallel_region(hidden_states)
-
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -623,10 +620,6 @@ class LlamaModel(LlamaModelHF):
 
         hidden_states = self.norm(hidden_states)
 
-        if self.config.sequence_parallel_enabled:
-            hidden_states = mappings.gather_from_sequence_parallel_region(hidden_states, to_model_parallel=False)
-            hidden_states = hidden_states.transpose(0, 1).contiguous()
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -658,6 +651,7 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             bias=False,
             gather_output=False,
             init_method=init_method,
+            sequence_parallel_enabled=config.sequence_parallel_enabled
         )
         # Initialize weights and apply final processing
         self.post_init()
@@ -729,6 +723,8 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             logits = torch.cat(logits, dim=-1)
         else:
             logits = self.lm_head(hidden_states)
+            if self.config.sequence_parallel_enabled:
+                logits = logits.transpose(0, 1).contiguous()
 
         if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
             logits = logits.double()
