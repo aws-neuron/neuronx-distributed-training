@@ -74,7 +74,7 @@ Checkpoint Saving/loading
    save the model ``state_dict`` and the optimizer separately. The model statedict is saved in a folder
    of the form: ``model/dp_rank_00_tp_rank_00_pp_rank_00.pt`` and the optimizer is saved into a separate folder
    as: ``optim/dp_rank_00_tp_rank_00_pp_rank_00.pt``. This is mainly done so that when we use
-   `zero1 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html?highlight=zero1#neuron-zero1-optimizer>`_,
+   `zero1 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#neuron-zero1-optimizer>`_,
    each DP rank can save its own optimizer shard.
 
 #.
