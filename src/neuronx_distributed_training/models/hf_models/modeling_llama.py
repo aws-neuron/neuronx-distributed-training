@@ -257,13 +257,13 @@ class LlamaAttention(LlamaAttentionHF):
         self.rope_theta = config.rope_theta
         self.use_flash_attention = config.use_flash_attention
 
-        if not hasattr(config, "kv_shared_group_size"):
-            config.kv_shared_group_size = 1
+        if not hasattr(self.config, "kv_shared_group_size"):
+            self.config.kv_shared_group_size = 1
 
-        if not hasattr(config, "qkv_linear"):
-            config.qkv_linear = False
+        if not hasattr(self.config, "qkv_linear"):
+            self.config.qkv_linear = False
 
-        config.fuse_qkv = getattr(config, "fuse_qkv", False)
+        self.config.fuse_qkv = getattr(self.config, "fuse_qkv", True)
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
