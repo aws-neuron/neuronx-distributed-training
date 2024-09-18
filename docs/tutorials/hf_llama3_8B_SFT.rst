@@ -1,11 +1,11 @@
 .. _hf_llama3_8B_SFT:
 
-HuggingFace LLama3-8B Supervised Fine-tuning
+HuggingFace Llama3-8B Supervised Fine-tuning
 ============================================
 
-In this example, we will compile and finetune pre-trained HF LLama3-8B model
-on a single instance with the ``NeuronxDistributedTraining`` library.
-The pre-trained LLama3-8B model serves as the foundation, and we will
+In this example, we will compile and finetune pre-trained HF Llama3-8B model
+on a single instance with the ``NxD Training (NxDT)`` library.
+The pre-trained Llama3-8B model serves as the foundation, and we will
 build upon this solid base by fine-tuning the model to adapt
 it to a specific task or dataset.
 The example has the following main sections:
@@ -20,13 +20,14 @@ Setting up the environment
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
+Once you have launched a Trn1 instance,
 Please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
-Next, we will need to install ``NeuronxDistributedTraining`` and its dependencies.
-Please see the following installation guide for installing ``NeuronxDistributedTraining``:
-:ref:`NxDT Installation Guide <nxdt_installation_guide>`
+Next, we will need to install ``NxDT`` and its dependencies.
+Please see the following installation guide for installing ``NxDT``:
+:ref:`NxDT Installation Guide <nxdt_installation_guide>`.
 
 
 SFT-YAML Configuration Overview
@@ -59,7 +60,7 @@ You can configuring a bunch of SFT-specific and model parameters for finetuning 
     Manually set the checkpoint file (pretrained checkpoint) to load from
 
         * **Type**: str
-        * **Default**: `/pretrained_ckpt`
+        * **Default**: ``/pretrained_ckpt``
         * **Required**: True (start with pretrained checkpoint)
 
 **data**
@@ -119,7 +120,7 @@ You can configuring a bunch of SFT-specific and model parameters for finetuning 
         Set tokenizer path/type
 
             * **Type**: str
-            * **Default**: `/llama3_tokenizer`
+            * **Default**: ``/llama3_tokenizer``
             * **Required**: True
 
  **model**
@@ -136,7 +137,7 @@ Download the dataset
 
 This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
 dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
-by running the following commands on the head node or your trn1 instance:
+by running the following AWS CLI commands on the head node or your Trn1 instance:
 
 .. code-block:: bash
 
@@ -149,18 +150,18 @@ by running the following commands on the head node or your trn1 instance:
 Download pretrained model checkpoint and tokenizer
 --------------------------------------------------
 
-In this tutorial, we will use a pretrained llama3-8B checkpoint from the original repository.
+In this tutorial, we will use a pretrained Llama3-8B checkpoint from the original repository.
 Follow the steps to download tokenizer and model checkpoint from
 the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
 
-Create a folder `/llama3_tokenizer` and copy the tokenizer contents to it.
+Create a folder ``/llama3_tokenizer`` and copy the tokenizer contents to it.
 
 Modify the following paths in YAML file based on your specific directory configuration:
 
-1. `model.model_config`
-2. `exp_manager.resume_from_checkpoint`
-3. `tokenizer.type`
-4. `train_dir` and `val_dir`
+1. ``model.model_config``
+2. ``exp_manager.resume_from_checkpoint``
+3. ``tokenizer.type``
+4. ``train_dir`` and ``val_dir``
 
 You can use your custom model, pretrained checkpoint and tokenizer by
 modifying ``hf_llama3_8B_SFT_config.yaml`` file.
@@ -168,10 +169,11 @@ modifying ``hf_llama3_8B_SFT_config.yaml`` file.
 
 Checkpoint Conversion
 ^^^^^^^^^^^^^^^^^^^^^
+
 Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
-HF-style llama3-8B checkpoint
-to NxDT supported format and store it in  `/pretrained_ckpt/` directory.
-Modify the `exp_manager.resume_from_checkpoint` path to the pretrained checkpoint path.
+HF-style Llama3-8B checkpoint
+to NxDT supported format and store it in  ``/pretrained_ckpt/`` directory.
+Modify the ``exp_manager.resume_from_checkpoint`` path to the pretrained checkpoint path.
 
 Pre-compile the model
 ---------------------
@@ -223,7 +225,7 @@ Then, you know your compilation has successfully completed.
 Training the model
 ------------------
 
-The pre-training job is launched almost exactly the same as the compile job.
+The pre-training job is launched almost exactly in the same way as the compile job.
 We now turn off the ``COMPILE`` environment variable and
 run the same training script to start pre-training.
 
@@ -293,6 +295,5 @@ to capture performance and utilization statistics and to understand NeuronCore a
 Troubleshooting Guide
 ---------------------
 
-For issues with ``NeuronxDistributedTraining``, please see:
+For issues with ``NxDT``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`
-

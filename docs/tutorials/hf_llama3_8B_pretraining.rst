@@ -1,10 +1,10 @@
-.. _megatron_gpt_pretraining:
+.. _hf_llama3_8B_pretraining:
 
-Megatron GPT Pretraining
-========================
+HuggingFace Llama3-8B Pretraining
+=================================
 
-In this example, we will compile and train a Megatron GPT model on a single instance or
-on multiple instances using ParallelCluster with the ``NxD Training (NxDT)`` library.
+In this example, we will compile and train a HF Llama3-8B model on a single instance
+with the ``NxD Training (NxDT)`` library.
 The example has the following main sections:
 
 .. contents:: Table of contents
@@ -14,23 +14,10 @@ The example has the following main sections:
 Setting up the environment
 --------------------------
 
-ParallelCluster Setup
-^^^^^^^^^^^^^^^^^^^^^
-
-In this example, we will use 8 instances with ParallelCluster,
-please follow the instructions here to create a cluster:
-`Train your model on ParallelCluster
-<https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/devflows/training/parallelcluster/parallelcluster-training.html>`_
-
-ParallelCluster automates the creation of Trn1 clusters,
-and provides the SLURM job management system for scheduling and managing distributed training jobs.
-Please note that the home directory on your ParallelCluster
-head node will be shared with all of the worker nodes via NFS.
-
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
-Once you have launched a Trn1 instance or ParallelCluster,
+Once you have launched a Trn1 instance,
 please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
@@ -43,20 +30,17 @@ Please see the following installation guide for installing ``NxDT``:
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed Wikipedia dataset that is stored in S3.
+This tutorial makes use of a preprocessed and tokenized Wikicorpus
+dataset that is stored in S3.
 The dataset can be downloaded to your cluster or instance by running
 the following AWS CLI commands on the head node or your Trn1 instance:
 
 .. code-block:: bash
 
-    export DATA_DIR=~/examples_datasets/gpt2
+    export DATA_DIR=~/examples_datasets/
     mkdir -p ${DATA_DIR} && cd ${DATA_DIR}
-    wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json
-    wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt
-    aws s3 cp s3://neuron-s3/training_datasets/gpt/wikipedia/my-gpt2_text_document.bin .  --no-sign-request
-    aws s3 cp s3://neuron-s3/training_datasets/gpt/wikipedia/my-gpt2_text_document.idx .  --no-sign-request
-    aws s3 cp s3://neuron-s3/training_datasets/gpt/wikipedia/license.txt .  --no-sign-request
-
+    aws s3 cp s3://neuron-s3/training_datasets/llama3/wikicorpus_llama3_tokenized_8k .  --no-sign-request
+    aws s3 cp s3://neuron-s3/training_datasets/llama3/llama3_8B_config.json ~/config.json  --no-sign-request
 
 
 Pre-compile the model
@@ -77,7 +61,7 @@ which is considerably faster than the JIT flow.
 First, ensure that you are using the proper config file in the ``conf/`` directory.
 In the ``train.sh`` file, ensure that the ``CONF_FILE`` variable is properly
 set to the config for the model you want to use. In our case,
-it will be ``megatron_gpt_config``. The default config here is a 6.7B parameter model,
+it will be ``hf_llama3_8B_config``. The default config here is a 8B parameter model,
 but users can also add their own ``conf/*.yaml`` files and run different configs and
 hyperparameters if desired. Please see :ref:`Config Overview <nxdt_config_overview>`
 for examples and usage for the ``.yaml`` config files.
@@ -105,51 +89,6 @@ Then, you know your compilation has successfully completed.
     The number of graphs will differ based on package versions, models, and other factors.
     This is just an example.
 
-If you are using ParallelCluster, then you will need to update the ``conf/megatron_gpt_config.yaml``
-with
-
-.. code-block:: yaml
-
-    num_nodes: 8
-
-Then to run the compile job:
-
-.. code-block:: bash
-
-    export COMPILE=1
-    sbatch --exclusive \
-        --nodes 8 \
-        --cpus-per-task 128 \
-        --wrap="srun ./train.sh"
-
-Once you have launched the precompilation job, run the squeue command to view the
-SLURM job queue on your cluster. If you have not recently run a job on your cluster,
-it may take 4-5 minutes for the requested trn1.32xlarge nodes to be launched and initialized.
-Once the job is running, squeue should show output similar to the following:
-
-.. code-block:: bash
-
-    JOBID  PARTITION  NAME      USER    ST  TIME  NODES NODELIST(REASON)
-    10     compute1   wrap      ubuntu  R   5:11  8     compute1-dy-queue1-i1-[0-7]
-
-You can view the output of the precompilation job by examining the file named
-``slurm-ZZ.out``,
-where ZZ represents the JOBID of your job in the squeue output above.
-
-.. code-block:: bash
-
-    tail -f slurm-10.out
-
-Once the precompilation job is complete, just like the above output
-you should see a message similar to the following in the logs:
-
-.. code-block:: bash
-
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total graphs: 22
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total successful compilations: 22
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total failed compilations: 0
-
-At this point, you can press ``CTRL-C`` to exit the tail command.
 
 Training the model
 ------------------
@@ -165,18 +104,6 @@ On a single instance:
     export COMPILE=0
     ./train.sh
 
-If you are using ParallelCluster:
-
-.. code-block:: bash
-
-    export COMPILE=0
-    sbatch --exclusive \
-        --nodes 8 \
-        --cpus-per-task 128 \
-        --wrap="srun ./train.sh"
-
-As outlined above, you can again use the ``squeue`` command to view the job queue,
-and also monitor the job in the same way with the ``tail`` command to see the training logs.
 Once the model is loaded onto the Trainium accelerators and training has commenced,
 you will begin to see output indicating the job progress:
 
@@ -187,6 +114,7 @@ Example:
     Epoch 0:   0%|          | 189/301501 [59:12<1573:03:24, 18.79s/it, loss=7.75, v_num=3-16, reduced_train_loss=7.560, global_step=188.0, consumed_samples=24064.0]
     Epoch 0:   0%|          | 190/301501 [59:30<1572:41:13, 18.79s/it, loss=7.74, v_num=3-16, reduced_train_loss=7.560, global_step=189.0, consumed_samples=24192.0]
     Epoch 0:   0%|          | 191/301501 [59:48<1572:21:28, 18.79s/it, loss=7.73, v_num=3-16, reduced_train_loss=7.910, global_step=190.0, consumed_samples=24320.0]
+
 
 Monitoring Training
 -------------------
@@ -199,12 +127,12 @@ you can also use standard tools such as TensorBoard to monitor training job prog
 To view an ongoing training job in TensorBoard, you first need to identify the
 experiment directory associated with your ongoing job.
 This will typically be the most recently created directory under
-``~/neuronx-distributed-training/examples/nemo_experiments/megatron_gpt/``.
+``~/neuronx-distributed-training/examples/nemo_experiments/hf_llama3_8B/``.
 Once you have identifed the directory, cd into it, and then launch TensorBoard:
 
 .. code-block:: bash
 
-    cd ~/neuronx-distributed-training/examples/nemo_experiments/megatron_gpt/
+    cd ~/neuronx-distributed-training/examples/nemo_experiments/hf_llama3_8B/
     tensorboard --logdir ./
 
 With TensorBoard running, you can then view the TensorBoard dashboard by browsing to
@@ -220,8 +148,7 @@ neuron-top / neuron-monitor / neuron-ls
 
 The `neuron-top <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/tools/neuron-sys-tools/neuron-top-user-guide.html>`_
 tool can be used to view useful information about NeuronCore utilization, vCPU and RAM utilization,
-and loaded graphs on a per-node basis. To use neuron-top during on ongoing training job,
-first SSH into one of your compute nodes from the head node (if using ParallelCluster), and then run ``neuron-top``:
+and loaded graphs on a per-node basis. To use neuron-top during on ongoing training job, run ``neuron-top``:
 
 .. code-block:: bash
 
@@ -239,6 +166,3 @@ Troubleshooting Guide
 
 For issues with ``NxDT``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`
-
-For ParallelCluster issues see:
-`AWS ParallelCluster Troubleshooting <https://docs.aws.amazon.com/parallelcluster/latest/ug/troubleshooting-v3.html>`_

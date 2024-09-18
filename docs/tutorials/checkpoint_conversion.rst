@@ -7,7 +7,7 @@ Checkpoint Conversion
    :local:
    :depth: 2
 
-The  ``NeuronxDistributedTraining (NxDT)`` library provides a versatile checkpoint conversion functionality,
+The  ``NxD Training (NxDT)`` library provides a versatile checkpoint conversion functionality,
 allowing seamless transition between different model styles. This tutorial aims to provide a
 comprehensive guide through the various use cases and demonstrate how to perform the checkpoint conversions.
 
@@ -19,7 +19,7 @@ The checkpoint conversion functionality supports conversion of the following mod
 1. **HuggingFace (HF) style models**
 2. **Megatron style models**
 
-Extends support for both GQA (LLaMA-3) and non-GQA models (LLaMA-2).
+Extends support for both GQA (Llama-3) and non-GQA models (Llama-2).
 
 Conversion Scenarios and Usage
 ------------------------------
@@ -30,14 +30,14 @@ Run the following commands from the ``/examples/checkpoint_conversion_scripts/``
 
 .. note::
 
-   1. Please ensure that the model configuration `config.json` file is present,
+   1. Please ensure that the model configuration ``config.json`` file is present,
       as it is required for checkpoint conversions.
       If not present, you will need to create it.
 
-   2. If your HF/custom checkpoint has multiple `.bin` or `.pt` files
+   2. If your HF/custom checkpoint has multiple ``.bin`` or ``.pt`` files
       then merge and convert to a single file before conversion.
 
-For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear` argument to `False`.
+For conversion of non-GQA based models (e.g. Llama2), just set the ``--qkv_linear`` argument to ``False``.
 
 1. **HF style model**:
 
@@ -61,7 +61,7 @@ For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear
 
     This converts an NxDT checkpoint to an HF-style checkpoint.
 
-2. **Megatron style model (non-GQA models: e.g., LLaMA-2, and GQA models: e.g., LLaMA-3)**:
+2. **Megatron style model (non-GQA models: e.g., Llama-2, and GQA models: e.g., Llama-3)**:
 
    a. **HF to NxDT Megatron checkpoint**:
 
@@ -81,27 +81,27 @@ For conversion of non-GQA based models (e.g. LLama2), just set the `--qkv_linear
 
        python3 checkpoint_converter.py  --model_style megatron --input_dir ~/examples/nemo_experiments/megatron_llama/2024-07-23_21-07-30/checkpoints/megatron_llama--step=5-consumed_samples=5120.0.ckpt/model --output_dir ~/megatron-tp8pp4-nxdt-to-hf4 --load_xser True --config ~/llama_gqa/config.json --tp_size 8 --pp_size 4 --kv_size_multiplier 1 --qkv_linear True --convert_to_full_state
 
-    This converts an NxDT Megatron-style checkpoint to an HF-style checkpoint (GQA-based model, see: `--qkv_linear` set to `True`).
+    This converts an NxDT Megatron-style checkpoint to an HF-style checkpoint (GQA-based model, see: ``--qkv_linear`` set to ``True``).
 
 
 Key Arguments
 ^^^^^^^^^^^^^
 
-The `checkpoint_converter.py` script supports the following key arguments:
+The ``checkpoint_converter.py`` script supports the following key arguments:
 
-- `--model_style`: Specifies the model style, either `hf` (HuggingFace: default) or `megatron`
-- `--input_dir`: (required) directory containing the input checkpoint
-- `--output_dir`: (required) directory to save the converted checkpoint directory
-- `--save_xser`: Saves the checkpoint with torch_xla serialization
-- `--load_xser`: Loads the checkpoint with torch_xla serialization
-- `--convert_from_full_state`: Converts full model checkpoint to sharded model checkpoint
-- `--convert_to_full_state`: Converts sharded model checkpoint to full model checkpoint
-- `--config`: path to the model configuration file (create `json` file if not present)
-- `--tp_size`: tensor parallelism degree
-- `--pp_size`: pipeline parallelism degree
-- `--n_layers`: number of layers in the model
-- `--kv_size_multiplier`: key-value size multiplier
-- `--qkv_linear`: boolean to specify GQA/non-GQA models
+- ``--model_style``: Specifies the model style, either `hf` (HuggingFace: default) or `megatron`
+- ``--input_dir``: (required) directory containing the input checkpoint
+- ``--output_dir``: (required) directory to save the converted checkpoint directory
+- ``--save_xser``: Saves the checkpoint with torch_xla serialization
+- ``--load_xser``: Loads the checkpoint with torch_xla serialization
+- ``--convert_from_full_state``: Converts full model checkpoint to sharded model checkpoint
+- ``--convert_to_full_state``: Converts sharded model checkpoint to full model checkpoint
+- ``--config``: path to the model configuration file (create `json` file if not present)
+- ``--tp_size``: tensor parallelism degree
+- ``--pp_size``: pipeline parallelism degree
+- ``--n_layers``: number of layers in the model
+- ``--kv_size_multiplier``: key-value size multiplier
+- ``--qkv_linear``: boolean to specify GQA/non-GQA models
 
 We recommend enabling xser for significantly faster save and load times.
 Note that if the checkpoint is saved with xser, it can only be loaded with xser,
@@ -110,9 +110,9 @@ and vice versa.
 Conversion Example
 ------------------
 
-Assuming you have a pre-trained HF-style LLama3-8B model checkpoint looking similar to:
+Assuming you have a pre-trained HF-style Llama3-8B model checkpoint looking similar to:
 
-`input_dir: /hf/checkpoint/pytorch_model.bin`
+``input_dir: /hf/checkpoint/pytorch_model.bin``
 
 .. code-block:: bash
 
@@ -120,13 +120,13 @@ Assuming you have a pre-trained HF-style LLama3-8B model checkpoint looking simi
 
   -rw-r--r-- 1 user group 123 Aug 27 2024 pytorch_model.bin
 
-Convert the HF-style checkpoint to an NXDT checkpoint on a single instance:
+Convert the HF-style checkpoint to an NxDT checkpoint on a single instance:
 
 .. code-block:: bash
 
   python3 checkpoint_converter.py --model_style hf --input_dir /hf/checkpoint/pytorch_model.bin --output_dir /nxdt/checkpoint --save_xser True --convert_from_full_state --config /path/to/config.json --tp_size 8 --pp_size 4 --n_layers 32 --kv_size_multiplier 1 --qkv_linear True --convert_from_full_state
 
-This command will create an NxDT checkpoint in `output_dir: /nxdt/checkpoint`
+This command will create an NxDT checkpoint in ``output_dir: /nxdt/checkpoint``
 and it will be sharded with (tp=8, pp=4) like:
 
 .. code-block:: bash
