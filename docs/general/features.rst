@@ -36,7 +36,7 @@ Distributed Techniques
 Modules
 --------
 
-1. `Grouped Query Attention layer <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
+1. `Grouped Query Attention layer <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
 2. Mixture of Experts (MoE)
 
 Model/Optimizer Precision
