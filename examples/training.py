@@ -28,9 +28,13 @@ from neuronx_distributed_training.lightning_modules.data.sft_data_module import 
 from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
     HFLLamaModule,
 )
-from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
-    HFMixtralModule,
-)
+try:
+    from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
+        HFMixtralModule,
+    )
+except ModuleNotFoundError:
+    print("Ignore transformers, Mixtral will fail. Requires updated transformer version.")
+
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
     NLPDDPStrategy,
