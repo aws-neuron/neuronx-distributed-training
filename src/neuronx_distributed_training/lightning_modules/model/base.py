@@ -652,7 +652,7 @@ class BaseModelModule(NLPModel):
     def list_available_models(cls) -> Optional[PretrainedModelInfo]:
         return []
 
-    def init_weights(self, module):
+    def init_weights(self, module, device):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690

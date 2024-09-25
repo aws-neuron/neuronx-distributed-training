@@ -236,7 +236,7 @@ class MegatronGPTModel(MegatronBaseModel):
         loss_mean = running_loss / torch.distributed.get_world_size(group=parallel_state.get_data_parallel_group())
         return loss_mean
 
-    def init_weights(self, module):
+    def init_weights(self, module, device):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690
@@ -251,4 +251,4 @@ class MegatronGPTModel(MegatronBaseModel):
         elif isinstance(module, torch.nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=1)
         else:
-            super().init_weights(module)
+            super().init_weights(module, device)

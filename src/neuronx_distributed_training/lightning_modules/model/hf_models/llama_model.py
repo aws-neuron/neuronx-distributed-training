@@ -5,9 +5,7 @@ import neuronx_distributed as nxd
 import torch
 from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
-import sys
-from neuronx_distributed.utils.utils import hardware
-from torch_neuronx.utils import get_platform_target
+
 from neuronx_distributed_training.models.hf_models.modeling_llama import (
     CoreAttention,
     LlamaDecoderLayer,
@@ -59,7 +57,8 @@ class HFLLamaModule(BaseHfModel):
                 "leaf_module_cls": leaf_module_cls,
             }
         )
-        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, config)
+        include_buffers = True
+        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, include_buffers, config)
 
     def model_provider_func(self, config):
         model = LlamaForCausalLM(config)
@@ -84,14 +83,19 @@ class HFLLamaModule(BaseHfModel):
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos()[None, None, :, :].to(torch.float32), emb.sin()[None, None, :, :].to(torch.float32)
 
-    def init_weights(self, module):
+    def init_weights(self, module, device):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690
         """
         # Last else should always call super().init_weights() to allow initializing
         # pre-defined layers.
+        for key, nested_module in module._modules.items():
+            if isinstance(nested_module, LlamaRotaryEmbedding):
+                module._modules[key] = LlamaRotaryEmbedding(
+                    nested_module.dim, nested_module.max_position_embeddings, nested_module.base, device
+                    )
         if isinstance(module, LlamaRMSNorm):
             module.weight.data.fill_(1.0)
         else:
-            super().init_weights(module)
+            super().init_weights(module, device)

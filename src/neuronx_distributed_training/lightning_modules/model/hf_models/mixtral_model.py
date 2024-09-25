@@ -61,7 +61,7 @@ class HFMixtralModule(BaseHfModel):
     def model_provider_func(self, config):
         return MixtralForCausalLM(config)
     
-    def init_weights(self, module):
+    def init_weights(self, module, device):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/v4.36.1/src/transformers/models/mixtral/modeling_mixtral.py#L849
@@ -71,4 +71,4 @@ class HFMixtralModule(BaseHfModel):
         if isinstance(module, MixtralRMSNorm):
             module.weight.data.fill_(1.0)
         else:
-            super().init_weights(module)
+            super().init_weights(module, device)
