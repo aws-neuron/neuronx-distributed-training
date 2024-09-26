@@ -33,7 +33,7 @@ try:
         HFMixtralModule,
     )
 except ModuleNotFoundError:
-    print("Ignore transformers, Mixtral will fail. Requires updated transformer version.")
+    logging.warning("Ignore transformers, Mixtral will fail. Requires updated transformer version.")
 
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
