@@ -74,6 +74,7 @@ model:
   num_layers: 32
   hidden_size: 4096
   qkv_linear: True
+  fuse_qkv: False
   rope_theta: 500000.0
   
   # Miscellaneous
