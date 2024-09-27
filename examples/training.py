@@ -28,12 +28,6 @@ from neuronx_distributed_training.lightning_modules.data.sft_data_module import 
 from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
     HFLLamaModule,
 )
-try:
-    from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
-        HFMixtralModule,
-    )
-except ModuleNotFoundError:
-    logging.warning("Ignore transformers, Mixtral will fail. Requires updated transformer version.")
 
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
@@ -88,6 +82,12 @@ def train(cfg) -> None:
         else:
             data_module = HFDataModule(cfg, trainer)
         if "mixtral" in cfg.name:
+            try:
+                from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
+                    HFMixtralModule,
+                )
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError("HF transformers package is not the correct version, must be at least 4.36.0.") from e
             model = HFMixtralModule(cfg, trainer)
         else:
             model = HFLLamaModule(cfg, trainer) 
