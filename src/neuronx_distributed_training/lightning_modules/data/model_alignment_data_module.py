@@ -10,19 +10,26 @@ import pyarrow as pa
 import transformers
 import torch
 from transformers import AutoTokenizer
+from datasets import Dataset
 from functools import partial
 import collections
 import logging
+import tempfile
 
 from neuronx_distributed_training.lightning_modules.data.datasets.ConcatDataset import ConcatDataset
-from neuronx_distributed_training.lightning_modules.data.datasets.PaddedDataset import PaddedDataset
+from neuronx_distributed_training.lightning_modules.data.datasets.PaddedDataset import PaddedDataset, PaddedDPODataset
 from neuronx_distributed_training.lightning_modules.data.base import BaseDataModule
 
 logger = logging.getLogger(__name__)
 
+try:
+    import trl
+    from trl.trainer.dpo_trainer import _tokenize
+except ImportError:
+    logger.warn("trl is required for the DPO algorithm, but it is not available. Please install the library to continue.")
 
-class SFTDataModule(BaseDataModule):
-    """SFT data class that loads pretrained tokenizer, tokenizes, packs and has the dataloader along with distributed sampler
+class ModelAlignmentDataModule(BaseDataModule):
+    """Model Alignment data class that loads pretrained tokenizer, tokenizes, packs and has the dataloader along with distributed sampler
 
     Args:
         BaseDataModule : Base data class
@@ -68,6 +75,7 @@ class SFTDataModule(BaseDataModule):
             path = getattr(self.config.data, partition + "_dir") # failing fix this on 30th
             if not path:
                 logger.warn(f"Path is empty for {partition=}")
+                data_split_list.remove(partition)
                 continue
 
             if path.lower().endswith("jsonl") or path.lower().endswith("json"):
@@ -81,7 +89,7 @@ class SFTDataModule(BaseDataModule):
                 raise ValueError(f"Path should have .jsonl/.json/.arrow, but got {path=}")
     
     def prompt_datasets(self, data_split_list):
-        """Applies templates to the input columns of the dataset
+        """Specific to SFT -- Applies templates to the input columns of the dataset
 
         Args:
             data_split_list (dict): All dataset splits need to be mentioned here 
@@ -113,26 +121,63 @@ class SFTDataModule(BaseDataModule):
     def tokenize_datasets(self, data_split_list):
         """Converts the text to tokens, updates the class instance attribute
 
+        Currently supports two model alignment algorithms: ["SFT", "DPO"]
+
         Args:
             data_split_list (dict): All dataset splits need to be mentioned here 
         """
-        def _tokenize_and_modify_for_FT(document):
-            src_tokens_batch = self.tokenizer(document[SFTDataModule.SRC_NAME], max_length=self.config.data.seq_length, add_special_tokens=False) # document[SRC_NAME] will have batch text lists
-            dst_tokens_batch = self.tokenizer(document[SFTDataModule.DST_NAME], max_length=self.config.data.seq_length, add_special_tokens=False)
+        algorithm_dispatchers = {
+            "dpo": self._tokenize_and_modify_multiple_responses,
+            "sft": self._tokenize_and_modify_for_SFT,
+        }
 
-            src_input_ids = [[self.tokenizer.bos_token_id] + i_d for i_d in src_tokens_batch["input_ids"]]
-            dst_input_ids = [o_d + [self.tokenizer.eos_token_id] for o_d in dst_tokens_batch["input_ids"]]
-            
-            return {
-                "input_ids": [i_d + o_d for i_d, o_d in zip(src_input_ids, dst_input_ids)],
-                "attention_mask": [[1] * (len(i_d) + len(o_d)) for i_d, o_d in zip(src_input_ids, dst_input_ids)], 
-                "labels" : [[-100] * len(i_d) + o_d for i_d, o_d in zip(src_input_ids, dst_input_ids)]
-            }
+        def _tokenize_and_modify():
+            for algorithm, dispatcher in algorithm_dispatchers.items():
+                if hasattr(self.config.data.alignment_strategy, algorithm) and getattr(self.config.data.alignment_strategy, algorithm):
+                    return dispatcher
+            raise ValueError("No supported algorithm configuration found in the config.")
 
         for partition in data_split_list:
             if self.config.data.dev_choose_samples:
                 self.data_sets[partition] = self.data_sets[partition].select(range(self.config.data.dev_choose_samples))
-            self.data_sets[partition] = self.data_sets[partition].map(_tokenize_and_modify_for_FT, batched=True) 
+            self.data_sets[partition] = self.data_sets[partition].map(_tokenize_and_modify(), batched=True) 
+
+
+    def _tokenize_and_modify_for_SFT(self, document):
+        """Tokenize the document for SFT."""
+        src_tokens_batch = self.tokenizer(document[ModelAlignmentDataModule.SRC_NAME], max_length=self.config.data.seq_length, add_special_tokens=False) # document[SRC_NAME] will have batch text lists
+        dst_tokens_batch = self.tokenizer(document[ModelAlignmentDataModule.DST_NAME], max_length=self.config.data.seq_length, add_special_tokens=False)
+
+        src_input_ids = [[self.tokenizer.bos_token_id] + i_d for i_d in src_tokens_batch["input_ids"]]
+        dst_input_ids = [o_d + [self.tokenizer.eos_token_id] for o_d in dst_tokens_batch["input_ids"]]
+        
+        return {
+            "input_ids": [i_d + o_d for i_d, o_d in zip(src_input_ids, dst_input_ids)],
+            "attention_mask": [[1] * (len(i_d) + len(o_d)) for i_d, o_d in zip(src_input_ids, dst_input_ids)], 
+            "labels" : [[-100] * len(i_d) + o_d for i_d, o_d in zip(src_input_ids, dst_input_ids)]
+        }
+
+    
+    def _tokenize_and_modify_multiple_responses(self, document):
+        """Tokenize the document for DPO, ORPO, etc"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = trl.DPOConfig(
+                output_dir=temp_dir,
+                max_prompt_length=self.config.data.alignment_strategy.dpo.max_dpo_prompt_length,
+                max_length=self.config.data.seq_length,
+                truncation_mode=self.config.data.alignment_strategy.dpo.truncation_mode
+            )
+
+        fn_kwargs = {"tokenizer": self.tokenizer, "args": args}
+
+        from trl.trainer.dpo_trainer import _tokenize
+        return Dataset.from_dict(document).map(
+                _tokenize,
+                fn_kwargs=fn_kwargs,
+                batched=True,
+                num_proc=None,
+                writer_batch_size=10,
+            ).to_dict()
     
 
     def _build_dataloader(self, data):
@@ -144,11 +189,17 @@ class SFTDataModule(BaseDataModule):
         pad_id_map = {'input_ids':self.tokenizer.pad_token_id,
                       'labels':-100,
                       'attention_mask':0}
-
-        if getattr(self.config.data,"packing",None):            
-            data = ConcatDataset(data, self.tokenizer.eos_token_id, pad_id_map, self.config.data.seq_length) # packs dataset and returns new dataset
-        else:
-            data = PaddedDataset(data, pad_id_map, self.config.data.seq_length) # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
+        
+        
+        if hasattr(self.config.data.alignment_strategy, 'sft'):
+            data_collator = transformers.DataCollatorForSeq2Seq(self.tokenizer)
+            if getattr(self.config.data.alignment_strategy.sft, "packing", None):            
+                data = ConcatDataset(data, self.tokenizer.eos_token_id, pad_id_map, self.config.data.seq_length) # packs dataset and returns new dataset
+            else:
+                data = PaddedDataset(data, pad_id_map, self.config.data.seq_length) # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
+        elif hasattr(self.config.data.alignment_strategy, 'dpo'):
+            data = PaddedDPODataset(data, self.config.data.seq_length)            
+            data_collator = trl.trainer.utils.DPODataCollatorWithPadding() # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
 
         sampler = DistributedSampler(
             data,
@@ -157,21 +208,22 @@ class SFTDataModule(BaseDataModule):
             shuffle=True,
             drop_last=True,
         )
+       
         return DataLoader(
             data,
-            collate_fn=transformers.DataCollatorForSeq2Seq(self.tokenizer),
+            collate_fn=data_collator,
             sampler=sampler,
             batch_size=int(self.config.data.global_batch_size / self.dp_size),
             num_workers=0,
             drop_last=True,
             pin_memory=True,
-        )       
+        )
         
     def train_dataloader(self):
         """
         Called once per epoch only, so we can shuffle here for packing and repack here every epoch. 
         Packing can be for every epoch or per dataset, depending on user choice as randomization still happens at model input level if not at per seq level.
-        """       
+        """
         return self._build_dataloader(self.data_sets['train'])
 
     def val_dataloader(self):
@@ -197,4 +249,3 @@ class SFTDataModule(BaseDataModule):
             attention_mask,
             position_ids,
         ]
-

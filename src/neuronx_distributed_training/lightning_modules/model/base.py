@@ -47,6 +47,7 @@ class BaseModelModule(NLPModel):
     def __init__(self, cfg, trainer, no_lm_init=True):
         super().__init__(cfg.model, trainer, no_lm_init=no_lm_init)
         self.config = cfg
+        self.trainer = trainer
         dp_size = xm.xrt_world_size() / (
             self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size")
         )
@@ -280,7 +281,6 @@ class BaseModelModule(NLPModel):
 
     def configure_optimizers(self):
         self.setup_optimization()
-            
         self._optimizer = nxd.initialize_parallel_optimizer(
             self.nxd_config,
             get_optimizer(self.config.model.optim["name"]),
@@ -330,20 +330,20 @@ class BaseModelModule(NLPModel):
             all_batches.append(microbatch)
         return MpDeviceLoader(all_batches, xm.xla_device())
 
+    def model_fwd_calc_loss(self, batch):
+        output = self.model(**batch)
+        return output[0]
+
     def forward_backward_step(self, batch, is_training=False):
         # TODO: Needs override
         device = xm.xla_device()
         running_loss = torch.zeros(1, device=device)
-        pipeline_config = self.nxd_config.get("pipeline_config", None)
-        input_names = None
-        if pipeline_config:
-            input_names = pipeline_config.get("input_names", None)
         if parallel_state.get_pipeline_model_parallel_size() == 1:
-            batch_for_pipeline = self.get_batch_iterator(self.trainer.datamodule.process_global_batch(batch, input_names))
+            batch_for_pipeline = self.get_batch_iterator(self.process_global_batch(batch))
             total_batches = len(batch_for_pipeline)
             for batch in batch_for_pipeline:
-                output = self.model(**batch)
-                loss = output[0]
+                loss = self.model_fwd_calc_loss(batch)
+                
                 # Want to run the loss in fp32 so that the division and sum are not affect by dp degree
                 if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
                     loss = loss.to(torch.float64)
@@ -352,7 +352,7 @@ class BaseModelModule(NLPModel):
                     loss.backward()
                 running_loss += loss.detach()
         else:
-            batch = self.trainer.datamodule.process_global_batch(batch, input_names)
+            batch = self.process_global_batch(batch)
             fwd_bwd_fn = self.model.run_train if is_training else self.model.run_eval
             output = fwd_bwd_fn(**batch)
             if parallel_state.get_pipeline_model_parallel_rank() == (

@@ -24,7 +24,7 @@ from pytorch_lightning.callbacks.timer import Timer
 from neuronx_distributed_training.lightning_modules.data.megatron import MegatronDataModule
 from neuronx_distributed_training.lightning_modules.model.megatron import MegatronGPTModel
 from neuronx_distributed_training.lightning_modules.data.hf_data_module import HFDataModule
-from neuronx_distributed_training.lightning_modules.data.sft_data_module import SFTDataModule
+from neuronx_distributed_training.lightning_modules.data.model_alignment_data_module import ModelAlignmentDataModule
 from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
     HFLLamaModule,
 )
@@ -71,14 +71,14 @@ def train(cfg) -> None:
             )
 
     if cfg.model_source == 'megatron':
-        if getattr(cfg.data, "use_sft_style_data_module", False):
-            data_module = SFTDataModule(cfg, trainer)
+        if getattr(cfg.data, "alignment_strategy", False):
+            data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = MegatronDataModule(cfg, trainer)        
         model = MegatronGPTModel(cfg, trainer)
     elif cfg.model_source == 'hf':
-        if getattr(cfg.data, "use_sft_style_data_module", False):
-            data_module = SFTDataModule(cfg, trainer)
+        if getattr(cfg.data, "alignment_strategy", False):
+            data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = HFDataModule(cfg, trainer)
         if "mixtral" in cfg.name:
