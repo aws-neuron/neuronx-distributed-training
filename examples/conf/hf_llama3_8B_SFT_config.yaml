@@ -20,7 +20,7 @@ exp_manager:
   create_tensorboard_logger: True
   explicit_log_dir: null
   exp_dir: null
-  name: hf_llama
+  name: hf_mistral
   resume_if_exists: True
   resume_ignore_no_checkpoint: True
   create_checkpoint_callback: True
@@ -29,7 +29,7 @@ exp_manager:
     save_top_k: 1
     mode: max
     save_last: False
-    filename: 'hf_llama3_8B_SFT--{step}-{consumed_samples}'
+    filename: 'hf_mistral_SFT--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
     every_n_train_steps: 10
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
@@ -59,7 +59,7 @@ data:
   dev_choose_samples: 2250 # [SFT] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset [SFT change 4 required]
   seq_length: 4096 # [SFT change 5 required]
   tokenizer:
-    type: /home/ubuntu/llama3_tokenizer # [SFT change 6 required]
+    type: /home/ubuntu/mistral_tokenizer # [SFT change 6 required]
 
 model:
   # specify micro_batch_size, global_batch_size, and model parallelism

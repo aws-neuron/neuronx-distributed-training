@@ -20,7 +20,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-""" PyTorch LLaMA model."""
+""" PyTorch Mistral model."""
 import math
 from functools import partial
 from typing import List, Optional, Tuple, Union
@@ -36,28 +36,28 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_llama import (
-    LLAMA_INPUTS_DOCSTRING,
-    LLAMA_START_DOCSTRING,
+from transformers.models.mistral.configuration_mistral import MistralConfig
+from transformers.models.mistral.modeling_mistral import (
+    MISTRAL_INPUTS_DOCSTRING,
+    MISTRAL_START_DOCSTRING,
 )
-from transformers.models.llama.modeling_llama import LlamaAttention as LlamaAttentionHF
-from transformers.models.llama.modeling_llama import (
-    LlamaDecoderLayer as LlamaDecoderLayerHF,
+from transformers.models.mistral.modeling_mistral import MistralAttention as MistralAttentionHF
+from transformers.models.mistral.modeling_mistral import (
+    MistralDecoderLayer as MistralDecoderLayerHF,
 )
-from transformers.models.llama.modeling_llama import (
-    LlamaForCausalLM as LlamaForCausalLMHF,
+from transformers.models.mistral.modeling_mistral import (
+    MistralForCausalLM as MistralForCausalLMHF,
 )
-from transformers.models.llama.modeling_llama import (
-    LlamaForSequenceClassification,
-    LlamaLinearScalingRotaryEmbedding,
+from transformers.models.mistral.modeling_mistral import (
+    MistralForSequenceClassification,
+    MistralLinearScalingRotaryEmbedding,
 )
-from transformers.models.llama.modeling_llama import LlamaMLP as LlamaMLPHF
-from transformers.models.llama.modeling_llama import LlamaModel as LlamaModelHF
-from transformers.models.llama.modeling_llama import LlamaPreTrainedModel
-from transformers.models.llama.modeling_llama import LlamaRMSNorm as LlamaRMSNormHF
-from transformers.models.llama.modeling_llama import (
-    LlamaRotaryEmbedding,
+from transformers.models.mistral.modeling_mistral import MistralMLP as MistralMLPHF
+from transformers.models.mistral.modeling_mistral import MistralModel as MistralModelHF
+from transformers.models.mistral.modeling_mistral import MistralPreTrainedModel
+from transformers.models.mistral.modeling_mistral import MistralRMSNorm as MistralRMSNormHF
+from transformers.models.mistral.modeling_mistral import (
+    MistralRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
     rotate_half,
@@ -98,7 +98,7 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "LlamaConfig"
+_CONFIG_FOR_DOC = "MistralConfig"
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -134,10 +134,10 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class LlamaRMSNorm(LlamaRMSNormHF):
+class MistralRMSNorm(MistralRMSNormHF):
     def __init__(self, hidden_size, eps=1e-6, sequence_parallel_enabled=False):
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        MistralRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__(hidden_size, eps=eps)
         setattr(self.weight, "sequence_parallel_enabled", sequence_parallel_enabled)
@@ -152,7 +152,7 @@ class LlamaRMSNorm(LlamaRMSNormHF):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class LlamaMLP(LlamaMLPHF):
+class MistralMLP(MistralMLPHF):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.config = config
@@ -238,10 +238,10 @@ class CoreAttention(nn.Module):
         return attn_output
 
 
-class LlamaAttention(LlamaAttentionHF):
+class MistralAttention(MistralAttentionHF):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: MistralConfig):
         nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
@@ -440,34 +440,34 @@ class LlamaAttention(LlamaAttentionHF):
         return attn_output, attn_weights, past_key_value
 
 
-class LlamaDecoderLayer(LlamaDecoderLayerHF):
-    def __init__(self, config: LlamaConfig):
+class MistralDecoderLayer(MistralDecoderLayerHF):
+    def __init__(self, config: MistralConfig):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
-        self.self_attn = LlamaAttention(config=config)
-        self.mlp = LlamaMLP(config)
-        self.input_layernorm = LlamaRMSNorm(
+        self.self_attn = MistralAttention(config=config)
+        self.mlp = MistralMLP(config)
+        self.input_layernorm = MistralRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled
         )
-        self.post_attention_layernorm = LlamaRMSNorm(
+        self.post_attention_layernorm = MistralRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled
         )
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
+    "The bare Mistral Model outputting raw hidden-states without any specific head on top.",
+    MISTRAL_START_DOCSTRING,
 )
-class LlamaModel(LlamaModelHF):
+class MistralModel(MistralModelHF):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
 
     Args:
-        config: LlamaConfig
+        config: MistralConfig
     """
 
-    def __init__(self, config: LlamaConfig):
-        LlamaPreTrainedModel.__init__(self, config)
+    def __init__(self, config: MistralConfig):
+        MistralPreTrainedModel.__init__(self, config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -475,8 +475,8 @@ class LlamaModel(LlamaModelHF):
         self.embed_tokens = ParallelEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method
         )
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = LlamaRMSNorm(
+        self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = MistralRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled
         )
 
@@ -502,7 +502,7 @@ class LlamaModel(LlamaModelHF):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -639,12 +639,12 @@ class LlamaModel(LlamaModelHF):
         )
 
 
-class LlamaForCausalLM(LlamaForCausalLMHF):
+class MistralForCausalLM(MistralForCausalLMHF):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        LlamaPreTrainedModel.__init__(self, config)
-        self.model = LlamaModel(config)
+        MistralPreTrainedModel.__init__(self, config)
+        self.model = MistralModel(config)
         self.pretraining_tp = config.pretraining_tp
         self.vocab_size = config.vocab_size
 
@@ -659,7 +659,7 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -686,9 +686,9 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LlamaForCausalLM
+        >>> from transformers import AutoTokenizer, MistralForCausalLM
 
-        >>> model = LlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = MistralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"

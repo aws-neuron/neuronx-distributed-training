@@ -25,8 +25,8 @@ from neuronx_distributed_training.lightning_modules.data.megatron import Megatro
 from neuronx_distributed_training.lightning_modules.model.megatron import MegatronGPTModel
 from neuronx_distributed_training.lightning_modules.data.hf_data_module import HFDataModule
 from neuronx_distributed_training.lightning_modules.data.sft_data_module import SFTDataModule
-from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
-    HFLLamaModule,
+from neuronx_distributed_training.lightning_modules.model.hf_models.mistral_model import (
+    HFMistralModule,
 )
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
@@ -80,7 +80,7 @@ def train(cfg) -> None:
             data_module = SFTDataModule(cfg, trainer)
         else:
             data_module = HFDataModule(cfg, trainer)
-        model = HFLLamaModule(cfg, trainer)        
+        model = HFMistralModule(cfg, trainer)        
     else:
         raise NotImplementedError
     trainer.fit(model, datamodule=data_module)
