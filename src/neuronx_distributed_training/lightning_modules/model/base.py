@@ -25,6 +25,7 @@ from neuronx_distributed.parallel_layers.layers import (
 from neuronx_distributed.parallel_layers.utils import (
     param_is_not_tensor_parallel_duplicate,
 )
+from neuronx_distributed.utils import tracing
 from neuronx_distributed.modules.moe.loss_function import load_balancing_loss_func
 from omegaconf import DictConfig
 from pytorch_lightning.trainer.connectors.logger_connector.fx_validator import (
@@ -72,6 +73,7 @@ class BaseModelModule(NLPModel):
 
         self._initialize_nxd_config()
         self.throughput = Throughput(10)
+        self.tracer = tracing.Tracer()
 
         initialize_model_parallel_for_nemo(
             world_size=trainer.world_size,
@@ -184,7 +186,8 @@ class BaseModelModule(NLPModel):
 
         # we zero grads here because we also call backward in the apex fwd/bwd functions
         self._optimizer.zero_grad()
-
+        
+        self.tracer.trace_step()
         with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
             loss_mean = self.forward_backward_step(batch, is_training=True)
 
