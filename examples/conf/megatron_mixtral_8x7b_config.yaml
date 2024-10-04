@@ -51,7 +51,7 @@ distributed_strategy:
   token_shuffle_group_size: 1
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 128
   # Path to data must be specified by the user.
   # Supports List, String and Dictionary

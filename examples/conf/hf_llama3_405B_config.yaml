@@ -50,7 +50,7 @@ distributed_strategy:
   kv_replicator: 8
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 1024
   train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama3_tokenized_8k
 

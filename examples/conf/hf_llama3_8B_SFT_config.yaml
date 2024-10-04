@@ -50,7 +50,7 @@ distributed_strategy:
   kv_replicator: 4
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 64
   train_dir: /home/ubuntu/training.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
   val_dir: /home/ubuntu/validation.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file
@@ -65,7 +65,7 @@ data:
 model:
   # specify micro_batch_size, global_batch_size, and model parallelism
   # gradient accumulation will be done automatically based on data_parallel_size
-  # micro_batch_size: 4 # limited by GPU memory
+  # micro_batch_size: 4 # limited by TRN memory
   # global_batch_size: 8 # will use more micro batches to reach global batch size
 
   # model architecture

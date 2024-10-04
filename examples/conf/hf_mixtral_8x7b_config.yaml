@@ -49,7 +49,7 @@ distributed_strategy:
   expert_model_parallel_size: 1
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 128
   train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama2_tokenized_4k
 
