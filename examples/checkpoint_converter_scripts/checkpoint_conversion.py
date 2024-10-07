@@ -638,7 +638,7 @@ class CheckpointConverterBase:
 
     def convert_from_full_state(self, args):
         full_state = self.load_full_state(args)
-        layer_name_pattern = r"^(model\.layers\.\d+)"
+        layer_name_pattern = r"^(layers\.\d+)"
         model_layer_names = sorted(
             list(
                 set(
