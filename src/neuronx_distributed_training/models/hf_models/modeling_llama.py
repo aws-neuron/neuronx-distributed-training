@@ -473,12 +473,11 @@ class LlamaModel(LlamaModelHF):
         LlamaPreTrainedModel.__init__(self, config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.config = config
 
         init_method = partial(_init_normal, config.initializer_range)
         self.embed_tokens = ParallelEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method,
-            sequence_parallel_enabled=config.sequence_parallel_enabled, sequence_dimension=1,
+            sequence_parallel_enabled=config.sequence_parallel_enabled
         )
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(
@@ -566,8 +565,6 @@ class LlamaModel(LlamaModelHF):
         # )
 
         hidden_states = inputs_embeds
-        if self.config.sequence_parallel_enabled:
-            hidden_states = hidden_states.transpose(0,1).contiguous()
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -759,5 +756,4 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
