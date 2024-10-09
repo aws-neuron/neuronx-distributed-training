@@ -49,9 +49,9 @@ Since we are built on top of NeMo, we have to install its dependencies too. One 
 
 .. code-block :: shell
 
-    git clone https://github.com/ericharper/apex.git ~/
+    git clone https://github.com/NVIDIA/apex.git ~/
     cd apex
-    git checkout nm_v1.14.0
+    git checkout 23.05
 
 
 2. Replace the contents of the ``setup.py`` with the following contents:
