@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 try:
     import trl
-    from trl.trainer.dpo_trainer import _tokenize
 except ImportError:
     logger.warn("trl is required for the DPO algorithm, but it is not available. Please install the library to continue.")
 
@@ -171,6 +170,8 @@ class ModelAlignmentDataModule(BaseDataModule):
         fn_kwargs = {"tokenizer": self.tokenizer, "args": args}
 
         from trl.trainer.dpo_trainer import _tokenize
+        # trl's tokenize will create tokenized {promp+response} pairs for both chosen and rejected responses
+        # Our input/output for this function is a dict and tokenize requires api contract of class Dataset as input/output
         return Dataset.from_dict(document).map(
                 _tokenize,
                 fn_kwargs=fn_kwargs,
@@ -198,7 +199,8 @@ class ModelAlignmentDataModule(BaseDataModule):
             else:
                 data = PaddedDataset(data, pad_id_map, self.config.data.seq_length) # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
         elif hasattr(self.config.data.alignment_strategy, 'dpo'):
-            data = PaddedDPODataset(data, self.config.data.seq_length)            
+            data = PaddedDPODataset(data, self.config.data.seq_length)
+            # collator is changed to handle keys in DPO input batch {chosen_input_ids, rejected_input_ids, etc}, not handled with transformers seq2seq collator  
             data_collator = trl.trainer.utils.DPODataCollatorWithPadding() # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
 
         sampler = DistributedSampler(

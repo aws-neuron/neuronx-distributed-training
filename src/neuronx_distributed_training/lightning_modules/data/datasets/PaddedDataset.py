@@ -84,10 +84,10 @@ class PaddedDPODataset(Dataset):
             to_pad = [torch.tensor(ex[key], dtype=dtype) for ex in data]
             padded_batch[key] = pad_token_tensor(to_pad, padding_size=self.pad_size, padding_value=padding_value, padding_side=padding_side)
 
-        # Handle other keys that don't need padding
+        # Handle other keys that don't need padding (refrence_probs passed in batch are handled here)
         for k in data[0].keys():
             if k not in keys_to_pad:
-                padded_batch[key] = [ex[key] for ex in data]
+                padded_batch[k] = [ex[k] for ex in data]
 
         # Converts dict of key and value to lists with dicts.
         samples = []

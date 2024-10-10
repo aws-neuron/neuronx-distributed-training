@@ -37,4 +37,3 @@ regex
 requests<2.32.0
 python-daemon
 huggingface_hub>=0.14.1,<0.24.0
-trl==0.10.1
