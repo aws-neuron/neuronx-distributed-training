@@ -479,8 +479,9 @@ This needs to be set if users want to use the
 
 **fuse_qkv**
 
-This flags enables qkv fusion, which improves performance, in the
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
+This is set if users want to use fused q, k and v tensors in
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_ Using fuse_qkv can improve throughput.
+This parameter is True by default.
 
     * **Type**: bool
     * **Required**: False
