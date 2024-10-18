@@ -13,16 +13,15 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-try:
-    import trl
-except ImportError:
-    logger.warn("trl is required for the DPO algorithm, but it is not available. Please install the library to continue.")
-
 
 class DPOBaseModel(BaseModelModule):
 
     def __init__(self, cfg: DictConfig, trainer: Trainer, model=None):
-        pass
+        try:
+            global trl
+            import trl
+        except ImportError:
+            raise ImportError("trl is required for the DPO algorithm, but it is not available. Please install the library to continue.")
         
     @torch.no_grad()
     def on_train_start(self, trainer, model, config) -> None:
@@ -92,7 +91,6 @@ class DPOBaseModel(BaseModelModule):
         loss = -torch.nn.functional.logsigmoid(self.beta * logits).mean(0)
 
         return loss
-
 
     def get_batch_logps(
         self,
