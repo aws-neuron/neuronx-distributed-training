@@ -49,7 +49,7 @@ Since we are built on top of NeMo, we have to install its dependencies too. One 
 
 .. code-block :: shell
 
-    git clone https://github.com/NVIDIA/apex.git ~/
+    git clone https://github.com/NVIDIA/apex.git
     cd apex
     git checkout 23.05
 

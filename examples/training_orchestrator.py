@@ -42,7 +42,7 @@ def process_config(cfg):
     # NOTE - Specifying TRAIN_ITERS as env variable is used for test purposes only,
     # recommended approach is to update variable in yaml cfg/pass it to script
     if os.environ.get("COMPILE") == "1":
-        cfg.trainer.max_steps = 4
+        cfg.trainer.max_steps = 10
         cfg.exp_manager.create_tensorboard_logger = False
         cfg.exp_manager.create_checkpoint_callback = False
     elif os.environ.get("COMPILE") == "0" and os.environ.get("TRAIN_ITERS") is not None:
