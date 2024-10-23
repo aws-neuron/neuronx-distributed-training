@@ -52,9 +52,21 @@ distributed_strategy:
   kv_replicator: 4
 
 data:
-  micro_batch_size: 1 # limited by TRN memory
-  global_batch_size: 1024
-  train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama3_tokenized_8k
+  micro_batch_size: 1 # limited by GPU memory
+  global_batch_size: 4 # [DPO] batch size will be twice the global batch size here, since we concatenate and forward chosen and rejected responses per prompt together
+  train_dir: /home/ubuntu/data_dpo.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
+  val_dir: null # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file
+  alignment_strategy:
+    dpo:
+      kl_beta: 0.01 # [DPO] kl-divergence beta to control divergence from reference model
+      loss_type: sigmoid # [DPO] support sigmoid versions of optimized dpo loss; options
+      max_dpo_prompt_length: 2048 # [DPO] maximum length of prompt in input
+      precompute_ref_log_probs: True # set to True, precompute reference model probs using pre-fit hook, False is not supported
+      truncation_mode: keep_start # how to truncate if size(prompt+response) exceeds seq_length; options: ["keep_start", "keep_end"]
+  dev_choose_samples: null # [SFT/DPO] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset
+  seq_length: 4096
+  tokenizer:
+    type: /home/ubuntu/llama3_tokenizer # [SFT change 6 required]
 
 model:
   # specify micro_batch_size, global_batch_size, and model parallelism
@@ -74,9 +86,8 @@ model:
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
 
-  # Activation Checkpointing
-  activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [LlamaRMSNorm, ActivationMultiplyMLP]
+  ## Activation Checkpointing
+  activations_checkpoint_granularity: full # 'selective' or 'full'
 
   fusions:
     flash_attention: True
@@ -84,9 +95,9 @@ model:
   do_layer_norm_weight_decay: True
 
   optim:
-    name: adamw
-    lr: 0.000015
-    weight_decay: 0.1
+    name: adamw_fp32OptState
+    lr: 5.0e-7
+    weight_decay: 0.01
     capturable: False
     betas:
     - 0.9
