@@ -17,14 +17,14 @@ from pytorch_lightning.trainer.trainer import Trainer
 
 class BaseHfModel(BaseModelModule):
     def on_train_start(self):
-        if self.config.data.get("alignment_strategy", False) == "dpo":
+        if 'dpo' in getattr(self.config.data, 'alignment_strategy', {}):
             self.dpo_module = DPOBaseModel(self.config, self.trainer, self.model)
             self.dpo_module.on_train_start(self.trainer, self.model, self.config)
         else:
             super().on_train_start()
 
     def model_fwd_calc_loss(self, batch):
-        if self.config.data.get("alignment_strategy", False) == "dpo":
+        if 'dpo' in getattr(self.config.data, 'alignment_strategy', {}):
             return self.dpo_module.model_fwd_calc_loss(self.model, batch, self.config)
         else:
             return super().model_fwd_calc_loss(batch)

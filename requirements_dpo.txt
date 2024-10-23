@@ -32,9 +32,12 @@ ipadic
 mecab-python3
 protobuf==3.20.3
 datasets
-dill==0.3.7
+dill==0.3.8
 nemo_toolkit==1.14
 regex
 requests<2.32.0
 python-daemon
 huggingface_hub>=0.14.1,<0.24.0
+multiprocess==0.70.16
+numba<=0.60.0
+numpy>=1.24.3,<=1.25.2
