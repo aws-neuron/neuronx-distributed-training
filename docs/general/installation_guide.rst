@@ -100,6 +100,9 @@ We can download the ``requirements.txt`` using the command:
 
     wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed-training/master/requirements.txt
 
+If you are using a U22 or later OS, please see `Common failures during installation`_,
+as these errors can happen during requirements installation.
+
 We can now install the dependencies of the library using the following command:
 
 .. code-block :: shell
