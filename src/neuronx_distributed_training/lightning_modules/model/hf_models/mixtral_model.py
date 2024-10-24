@@ -56,7 +56,8 @@ class HFMixtralModule(BaseHfModel):
                 "leaf_module_cls": leaf_module_cls,
             }
         )
-        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, config)
+        include_buffers = False
+        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, include_buffers, config)
 
     def model_provider_func(self, config):
         return MixtralForCausalLM(config)
