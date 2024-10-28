@@ -250,11 +250,12 @@ class BaseModelModule(NLPModel):
         return self.forward_backward_step(batch), self.get_batch_length(batch)
 
     def validation_epoch_end(self, outputs):
-        losses, length = outputs[0]
-        averaged_loss = torch.sum(losses) / torch.sum(torch.tensor(length))
+        # We want to take the average of all the losses reported in the validation epoch
+        losses_across_val_epoch = [x[0] for x in outputs]
+        averaged_loss_val_epoch = sum(losses_across_val_epoch) / len(losses_across_val_epoch)
         # we can only log on one rank if it is rank zero so we all_reduce from last rank
         # (effectively a broadcast since we are all_reducing with a zero tensor)
-        torch.distributed.all_reduce(averaged_loss, group=parallel_state.get_pipeline_model_parallel_group())
+        torch.distributed.all_reduce(averaged_loss_val_epoch, group=parallel_state.get_pipeline_model_parallel_group())
 
         def _log_val_loss(log_fn, loss):
             log_fn("val_loss", loss.cpu(), prog_bar=True, on_step=True, rank_zero_only=True, batch_size=1)
@@ -263,7 +264,7 @@ class BaseModelModule(NLPModel):
             _log_val_loss,
             (
                 self.log,
-                averaged_loss.detach(),
+                averaged_loss_val_epoch.detach(),
             ),
         )
 
