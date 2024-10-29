@@ -823,15 +823,12 @@ class LlamaRotaryEmbedding(LlamaRotaryEmbeddingHF):
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids, flash_attn):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids].unsqueeze(1)
-    sin = sin[position_ids].unsqueeze(1)
-    if flash_attn:
-        cos = cos.permute(0, 1, 3, 2)  # [bs, 1, dim, seq_len]
-        sin = sin.permute(0, 1, 3, 2)  # [bs, 1, dim, seq_len]
+    cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
