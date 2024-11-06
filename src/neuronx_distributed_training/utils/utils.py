@@ -6,14 +6,16 @@ import time
 from neuronx_distributed.utils.utils import hardware
 from torch_neuronx.utils import get_platform_target
 
-def get_lnc_size(lnc):
+def get_vnc_size(vnc):
     hardware_type = hardware(get_platform_target())
+	# else is not required, we default vnc=1 for trn1
     if hardware_type == hardware.TRN2:
-        if lnc is None:
-            lnc = 2
+        if vnc is None:
+            vnc = 2
+        assert vnc == 2, f"trn2 vnc config mismatch {vnc} != 2"
     else:
-        lnc = 1
-    return lnc
+        vnc = 1
+    return vnc
 
 class Throughput:
     def __init__(self, moving_avg_window_size):

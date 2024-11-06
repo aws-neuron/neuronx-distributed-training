@@ -140,6 +140,7 @@ model:
 
   # Activation Checkpointing
   activations_checkpoint_granularity: 'full' # 'selective' or 'full'
+  activations_checkpoint_recompute: null
 
   fusions:
     softmax: True

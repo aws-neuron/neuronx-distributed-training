@@ -151,7 +151,7 @@ class BaseModelModule(NLPModel):
             },
             model_init_config=model_init_config,
             mixed_precision_config=mixed_precision_config,
-            lnc_size=self.trainer.lnc,
+            vnc_size=self.trainer.vnc,
         )
 
     def _get_parameters(self):

@@ -4,7 +4,7 @@ seed: 1234
 
 trainer:
   devices: 64
-  lnc: 2 # default for trn2 workloads
+  vnc: 2 # default for trn2 workloads
   num_nodes: 8
   max_epochs: -1 # PTL default. In practice, max_steps will be reached first.
   max_steps: 10000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
@@ -15,7 +15,6 @@ trainer:
   limit_val_batches: 0.0
   limit_test_batches: 0.0
   gradient_clip_val: 1.0
-  sequential_move_factor: 32 # reduces init time with tp-pp config; should be <= trainer.devices
 
 exp_manager:
   log_local_rank_0_only: True # reduce file system access pressure
@@ -69,14 +68,13 @@ model:
   qkv_linear: True
   fuse_qkv: True
   rope_theta: 500000.0
-  pipeline_cuts: ["model.layers.18", "model.layers.39", "model.layers.60"] # for pipeline balancing
   
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
 
   # Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [LlamaRMSNorm, ActivationMultiplyMLP]
+  activations_checkpoint_recompute: [LlamaRMSNorm]
 
   fusions:
     flash_attention: True
@@ -108,7 +106,7 @@ precision:
   neuron_rt_stochastic_rounding_en: '0'
 
 # fix: hardcoded trn2 compiler flags to this config, will remove after compiler updates
-compiler_flags: '--model-type transformer --distribution-strategy=llm-training'
+compiler_flags: '--model-type transformer --distribution-strategy=llm-training --target=trn2 --internal-num-neuroncores-per-sengine=2 --tensorizer-options="--enable-insert-implicit-shard-axis"'
 compiler_cache_url: /home/ubuntu/neuron-cache
 aync_exec_max_inflight_requests: 5
 bucket_size_collectives: 1024

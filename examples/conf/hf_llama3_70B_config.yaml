@@ -73,7 +73,7 @@ model:
 
   ## Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute_mlp: True # will be restructured in future
+  activations_checkpoint_recompute: [CoreAttention, LlamaMLP]
 
   fusions:
     softmax: True

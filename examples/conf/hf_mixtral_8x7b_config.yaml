@@ -78,6 +78,7 @@ model:
 
   # Activation Checkpointing
   activations_checkpoint_granularity: 'full' # 'selective' or 'full' need to edit this in the config.json
+  activations_checkpoint_recompute: null
 
   fusions:
     softmax: True

@@ -3,7 +3,6 @@
 import hydra
 import os
 
-
 def set_env_variable(env_var_name, value, append=False, overwrite=False):
     if append and os.environ.get(env_var_name, None):
         os.environ[env_var_name] = f"{os.environ[env_var_name]} {value}"
