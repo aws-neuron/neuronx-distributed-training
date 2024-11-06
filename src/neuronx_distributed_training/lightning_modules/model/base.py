@@ -148,7 +148,8 @@ class BaseModelModule(NLPModel):
                 "virtual_pipeline_size": self.config.distributed_strategy.get("virtual_pipeline_model_parallel_size", 1),
             },
             model_init_config=model_init_config,
-            mixed_precision_config=mixed_precision_config
+            mixed_precision_config=mixed_precision_config,
+            vnc_size=self.trainer.vnc,
         )
 
     def _get_parameters(self):

@@ -6,8 +6,6 @@ import torch
 from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 import sys
-from neuronx_distributed.utils.utils import hardware
-from torch_neuronx.utils import get_platform_target
 from neuronx_distributed_training.models.hf_models.modeling_llama import (
     CoreAttention,
     LlamaDecoderLayer,
@@ -42,13 +40,21 @@ class HFLLamaModule(BaseHfModel):
             config.rope_theta = self.config.model.get('rope_theta')
 
         leaf_module_cls = [LlamaRMSNorm.__name__]
-        if self.config.model.get("activations_checkpoint_granularity", None) == "selective":
-            if self.config.model.get("activations_checkpoint_recompute_mlp", False) and self.config.model.encoder_seq_length>=8192:
-                self.nxd_config["activation_checkpoint_config"] = (CoreAttention, LlamaMLP)
-            else:
-                self.nxd_config["activation_checkpoint_config"] = CoreAttention
-        elif self.config.model.get("activations_checkpoint_granularity", None) == "full":
-            self.nxd_config["activation_checkpoint_config"] = "full"
+        activation_recompute_modules = []
+        recompute_modules = self.config.model.get("activations_checkpoint_recompute", [])
+        granularity = self.config.model.get("activations_checkpoint_granularity", None)
+
+        if granularity == "selective":
+            for module in recompute_modules:
+                module_obj = getattr(sys.modules[__name__], module, None)
+                if module_obj is not None:
+                    activation_recompute_modules.append(module_obj)
+        elif granularity == "full":
+            activation_recompute_modules = "full"
+        else:
+            activation_recompute_modules = None
+
+        self.nxd_config["activation_checkpoint_config"] = activation_recompute_modules
         self.nxd_config["pipeline_config"].update(
             {
                 "transformer_layer_cls": LlamaDecoderLayer,
