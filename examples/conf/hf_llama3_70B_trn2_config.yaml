@@ -15,6 +15,7 @@ trainer:
   limit_val_batches: 0.0
   limit_test_batches: 0.0
   gradient_clip_val: 1.0
+  sequential_move_factor: 32 # reduces init time with tp-pp config; larger number can lead to host OOM for larger models; should be <= trainer.devices
 
 exp_manager:
   log_local_rank_0_only: True # reduce file system access pressure
