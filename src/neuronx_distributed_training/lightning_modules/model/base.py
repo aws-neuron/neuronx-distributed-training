@@ -104,7 +104,7 @@ class BaseModelModule(NLPModel):
     def _initialize_nxd_config(self):
         if self.config.distributed_strategy.get("pipeline_model_parallel_size", 1) > 1:
             model_init_config = {
-                "sequential_move_factor": self.config.distributed_strategy.get("sequential_move_factor", 11),
+                "sequential_move_factor": self.config.trainer.get("sequential_move_factor", 11),
                 "meta_device_init": True,
                 "param_init_fn": self.init_weights,
             }
