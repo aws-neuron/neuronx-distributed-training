@@ -104,7 +104,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 from torchmetrics import Metric
-from neuronx_distributed_training.utils import get_vnc_size
+from neuronx_distributed_training.utils import get_lnc_size
 
 
 def has_len_all_ranks_patched(
@@ -658,14 +658,12 @@ class NLPTrainer(Trainer):
         move_metrics_to_cpu: bool = False,
         multiple_trainloader_mode: str = "max_size_cycle",
         inference_mode: bool = True,
-        vnc: int = None,
-        sequential_move_factor: Optional[int] = None,
+        lnc: int = None,
     ) -> None:
         Trainer._log_api_event("init")
         logging.info(f"{self.__class__.__name__}: Initializing trainer with parameters: {locals()}")
         self.state = TrainerState()
-        self.vnc = get_vnc_size(vnc)
-        self.sequential_move_factor = sequential_move_factor
+        self.lnc = get_lnc_size(lnc)
 
         if default_root_dir is not None:
             default_root_dir = os.fspath(default_root_dir)
