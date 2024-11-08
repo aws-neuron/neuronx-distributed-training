@@ -59,6 +59,7 @@ and this key allows users to configure the ``trainer``.
     limit_val_batches: 1
     limit_test_batches: 1
     gradient_clip_val: 1.0
+    sequential_move_factor: 11
 
 .. note::
 
@@ -134,6 +135,16 @@ Float value to clip gradients at.
 
     * **Type**: float
     * **Required**: True
+
+
+**sequential_move_factor**
+
+Number of ranks/devices participating in initializing the model weights in parallel. Useful to reduce init time
+when using TP-PP config. The value can be increased upto the number of ``trainer.devices`` being used.
+
+    * **Default value**: 11
+    * **Type**: integer
+    * **Required**: False
 
 
 
