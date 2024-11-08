@@ -4,7 +4,7 @@ seed: 1234
 
 trainer:
   devices: 64
-  vnc: 2 # default for trn2 workloads
+  lnc: 2 # default for trn2 workloads
   num_nodes: 8
   max_epochs: -1 # PTL default. In practice, max_steps will be reached first.
   max_steps: 10000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
