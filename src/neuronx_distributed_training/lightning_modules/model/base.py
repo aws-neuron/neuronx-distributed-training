@@ -138,7 +138,7 @@ class BaseModelModule(NLPModel):
             activation_checkpoint_config=None,  # We set None here and let individual models have their own
             pipeline_config={
                 "num_microbatches": self.num_microbatches,
-                "auto_partition": True,
+                "auto_partition": self.config.model.get("pipeline_cuts", None) is None,
                 "param_init_fn": None,
                 "autowrap_modules": [mappings],
                 "autowrap_functions": [load_balancing_loss_func],
@@ -146,6 +146,7 @@ class BaseModelModule(NLPModel):
                 "use_optimizer_wrapper": True,
                 "return_loss_on_cpu": False,
                 "virtual_pipeline_size": self.config.distributed_strategy.get("virtual_pipeline_model_parallel_size", 1),
+                "pipeline_cuts": self.config.model.get("pipeline_cuts", None),
             },
             model_init_config=model_init_config,
             mixed_precision_config=mixed_precision_config,
