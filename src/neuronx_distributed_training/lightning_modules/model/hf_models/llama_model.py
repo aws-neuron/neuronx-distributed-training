@@ -51,6 +51,8 @@ class HFLLamaModule(BaseHfModel):
                     activation_recompute_modules.append(module_obj)
         elif granularity == "full":
             activation_recompute_modules = "full"
+        elif not self.config.model.fusions.get("flash_attention", False):
+            activation_recompute_modules.append(CoreAttention) # do CoreAttention checkpointing if flash_attention is off
         else:
             activation_recompute_modules = None
 
