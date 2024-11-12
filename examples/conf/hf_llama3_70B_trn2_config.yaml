@@ -69,6 +69,7 @@ model:
   qkv_linear: True
   fuse_qkv: True
   rope_theta: 500000.0
+  pipeline_cuts: null
   
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
