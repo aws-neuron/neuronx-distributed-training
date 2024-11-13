@@ -488,6 +488,23 @@ This needs to be set if users want to use the
     * **Type**: bool
     * **Required**: True
 
+**fuse_qkv**
+
+This is set if users want to use fused q, k and v tensors in
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_ Using fuse_qkv can improve throughput.
+This parameter is True by default.
+
+    * **Type**: bool
+    * **Required**: False
+
+**pipeline_cuts**
+
+This is set as a list of layer names if users want to specify manual cut points for pipeline parallelism.
+One example is ['model.layers.10', 'model.layers.20'] in the case of PP=3.
+
+    * **Type**: List[str]
+    * **Required**: False
+
 **use_cpu_initialization**
 
 Setting this flag to ``True`` will initialize the weights on ``CPU`` and then move to device. It is recommended to set
