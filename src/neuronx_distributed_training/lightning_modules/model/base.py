@@ -205,35 +205,33 @@ class BaseModelModule(NLPModel):
 
             param_norm = None
             grad_norm = None
-            if full_log:
-                # only the last stages of the pipeline return losses
-                if self.log_parameter_norm:
-                    param_norm = self.calculate_parameter_norm(self.parameters())
-                if self.log_gradient_norm:
-                    grad_norm = self._optimizer.grad_norm
+            # only the last stages of the pipeline return losses
+            if self.log_parameter_norm:
+                param_norm = self.calculate_parameter_norm(self.parameters())
+            if self.log_gradient_norm:
+                grad_norm = self._optimizer.grad_norm
 
-                ## logging
-                # we can only log on one rank if it is rank zero so we broadcast from last rank
-                # we can avoid this broadcast by updating the PTL log function to accept specific ranks
-                torch.distributed.all_reduce(loss_mean, group=parallel_state.get_pipeline_model_parallel_group())
-
-        # TDOD : Consider using run_async = True on step closure. Avoiding that not to minimize functional risk
-        xm.add_step_closure(
-            self.log_metrics,
-            (
-                self.log,
-                loss_mean,
-                lr,
-                float(self.trainer.global_step),
-                float(consumed_samples),
-                grad_norm,
-                param_norm,
-                float(throughput),
-                float(throughput_peak),
-                full_log,
-                self.trainer,
-            ),
-        )
+            ## logging
+            # we can only log on one rank if it is rank zero so we broadcast from last rank
+            # we can avoid this broadcast by updating the PTL log function to accept specific ranks
+            torch.distributed.all_reduce(loss_mean, group=parallel_state.get_pipeline_model_parallel_group())
+        if full_log:
+            # TDOD : Consider using run_async = True on step closure. Avoiding that not to minimize functional risk
+            xm.add_step_closure(
+                self.log_metrics,
+                (
+                    self.log,
+                    loss_mean,
+                    lr,
+                    float(self.trainer.global_step),
+                    float(consumed_samples),
+                    grad_norm,
+                    param_norm,
+                    float(throughput),
+                    float(throughput_peak),
+                    self.trainer,
+                ),
+            )
         xm.mark_step()
 
         return None
@@ -597,14 +595,12 @@ class BaseModelModule(NLPModel):
         param_norm,
         throughput,
         throughput_peak,
-        full_log,
         trainer,
     ):
         loss_cpu = loss_mean.detach().cpu()
         trainer.fit_loop.epoch_loop.batch_loop.running_loss.append(loss_cpu)
-        if full_log:
-            log_fn("reduced_train_loss", loss_cpu, prog_bar=True, rank_zero_only=True)
-            log_fn("lr", lr, prog_bar=True, rank_zero_only=True)
+        log_fn("reduced_train_loss", loss_cpu, prog_bar=True, rank_zero_only=True)
+        log_fn("lr", lr, prog_bar=True, rank_zero_only=True)
         if param_norm:
             log_fn("parameter_norm", param_norm.detach().cpu(), prog_bar=True, rank_zero_only=True)
         if grad_norm:
