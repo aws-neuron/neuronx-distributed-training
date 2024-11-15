@@ -152,6 +152,18 @@ class LlamaRMSNorm(LlamaRMSNormHF):
         return self.weight * hidden_states.to(input_dtype)
 
 
+class ActivationMultiplyMLP(torch.nn.Module)
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
+    
+    def forward(self, x):
+        gate_proj, up_proj = x.split(self.split_size, dim=2)
+        intermediate_states = self.act_fn(gate_proj) * up_proj
+        return intermediate_states
+
+
 class LlamaMLP(LlamaMLPHF):
     def __init__(self, config):
         nn.Module.__init__(self)
@@ -197,18 +209,7 @@ class LlamaMLP(LlamaMLPHF):
             down_proj = [F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.pretraining_tp)]
             down_proj = sum(down_proj)
         else:
-            gate_proj, up_proj = self.gate_up_proj(x).split(self.split_size, dim=2)
-
-            def activation_mlp(gate_proj, up_proj):
-                activation_output = self.act_fn(gate_proj)
-                return activation_output * up_proj
-
-            # We checkpoint the MLP compute too, since we see extra data movement which is more
-            # expensive than the recompute in this case.
-            if self.config.selective_checkpoint_enabled:
-                intermediate_states = checkpoint_method(activation_mlp, gate_proj, up_proj)
-            else:
-                intermediate_states = self.act_fn(gate_proj) * up_proj
+            intermediate_states = self.activation_multiply(self.gate_up_proj(x))
             down_proj = self.down_proj(intermediate_states)
 
         return down_proj

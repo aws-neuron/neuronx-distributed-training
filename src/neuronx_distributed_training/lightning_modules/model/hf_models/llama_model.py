@@ -11,7 +11,8 @@ from neuronx_distributed_training.models.hf_models.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaRMSNorm,
-    LlamaMLP
+    LlamaMLP,
+    ActivationMultiplyMLP
 )
 
 from .base_model import BaseHfModel

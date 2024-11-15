@@ -76,7 +76,7 @@ model:
 
   # Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [LlamaRMSNorm]
+  activations_checkpoint_recompute: [LlamaRMSNorm, ActivationMultiplyMLP]
 
   fusions:
     flash_attention: True
