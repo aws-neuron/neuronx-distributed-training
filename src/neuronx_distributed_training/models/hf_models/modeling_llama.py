@@ -171,7 +171,6 @@ class LlamaMLP(LlamaMLPHF):
         self.pretraining_tp = config.pretraining_tp
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.act_fn = ACT2FN[config.hidden_act]
 
         init_method = partial(_init_normal, config.initializer_range)
         self.gate_up_proj = ColumnParallelLinear(
