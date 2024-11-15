@@ -152,7 +152,7 @@ class LlamaRMSNorm(LlamaRMSNormHF):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class ActivationMultiplyMLP(torch.nn.Module)
+class ActivationMultiplyMLP(torch.nn.Module):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.act_fn = ACT2FN[config.hidden_act]
