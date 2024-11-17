@@ -156,7 +156,7 @@ class ActivationMultiplyMLP(torch.nn.Module):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
+        self.split_size = config.intermediate_size // get_tensor_model_parallel_size()
     
     def forward(self, x):
         gate_proj, up_proj = x.split(self.split_size, dim=2)
