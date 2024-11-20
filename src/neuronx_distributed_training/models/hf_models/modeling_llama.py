@@ -256,6 +256,7 @@ class LlamaAttention(LlamaAttentionHF):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.use_flash_attention = config.use_flash_attention
+        self.lnc = config.lnc
 
         if not hasattr(self.config, "kv_shared_group_size"):
             self.config.kv_shared_group_size = 1
@@ -429,7 +430,7 @@ class LlamaAttention(LlamaAttentionHF):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_output = (
-            nki_flash_attn_func(query_states, key_states, value_states)
+            nki_flash_attn_func(query_states, key_states, value_states, self.lnc)
             if self.use_flash_attention
             else self.core_attn(query_states, key_states, value_states)
         )
