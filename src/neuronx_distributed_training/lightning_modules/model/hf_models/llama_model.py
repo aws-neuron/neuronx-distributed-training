@@ -26,6 +26,7 @@ class HFLLamaModule(BaseHfModel):
         config.kv_shared_group_size = self.config.distributed_strategy.get("kv_replicator", 1)
         config.max_position_embeddings = max(config.max_position_embeddings, self.config.model.get("max_position_embeddings"))
         config.use_flash_attention = self.config.model.fusions.flash_attention
+        config.lnc = self.config.trainer.get("lnc", 2)
         if self.config.model.get('num_layers', -1) != -1:
             config.num_hidden_layers = self.config.model.get('num_layers')
         if self.config.model.get('hidden_size', -1) != -1:
