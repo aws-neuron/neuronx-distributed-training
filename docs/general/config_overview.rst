@@ -349,7 +349,7 @@ The sequence dimension will be sharded with the same degree as the ``tensor_mode
 **kv_replicator**
 
 This parameter is used together with ``qkv_linear`` parameter. It is used to configure the
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
 
     * **Type**: bool
     * **Required**: True
@@ -472,7 +472,7 @@ is common for all models supported in the library.
 **qkv_linear**
 
 This needs to be set if users want to use the
-`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api_guide.html#gqa-qkv-linear-module>`_
+`GQAQKVLinear module <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/api-reference-guide-training.html#gqa-qkv-linear-module>`_
 
     * **Type**: bool
     * **Required**: True
