@@ -14,6 +14,9 @@
 
 import datetime
 import os
+import sys
+sys.path.insert(0, "/home/ubuntu/neuronx-distributed-training")
+
 
 import torch
 from lightning_lite.plugins.environments import TorchElasticEnvironment
