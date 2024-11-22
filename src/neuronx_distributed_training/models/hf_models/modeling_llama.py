@@ -191,7 +191,7 @@ class LlamaMLP(LlamaMLPHF):
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.activation_multiply = ActivationMultiplyMLP(config)
-        if config.move_model_to_device:
+        if config.get('move_model_to_device', False):
             move_model_to_device(self, xm.xla_device())
 
     def forward(self, x):
@@ -334,7 +334,7 @@ class LlamaAttention(LlamaAttentionHF):
 
         self.core_attn = CoreAttention()
 
-        if config.move_model_to_device:
+        if config.get('move_model_to_device', False):
             move_model_to_device(self, xm.xla_device())
     
     def _init_rope(self):
