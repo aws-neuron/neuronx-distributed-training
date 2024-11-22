@@ -4,6 +4,14 @@
 import queue
 import time
 
+def get_lnc_size(lnc):
+    hardware_type = hardware(get_platform_target())
+    if hardware_type == hardware.TRN2:
+        if lnc is None:
+            lnc = 2
+    else:
+        lnc = 1
+    return lnc
 
 class Throughput:
     def __init__(self, moving_avg_window_size):
