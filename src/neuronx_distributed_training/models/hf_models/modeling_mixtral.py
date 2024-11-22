@@ -447,7 +447,7 @@ class LlamaMLP(LlamaMLPHF):
 
             # We checkpoint the MLP compute too, since we see extra data movement which is more
             # expensive than the recompute in this case.
-            if config.get('selective_checkpoint_enabled', False):
+            if self.config.get('selective_checkpoint_enabled', False):
                 intermediate_states = checkpoint_method(activation_mlp, gate_proj, up_proj)
             else:
                 intermediate_states = self.act_fn(gate_proj) * up_proj
