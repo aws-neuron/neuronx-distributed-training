@@ -69,7 +69,7 @@ model:
   qkv_linear: True
   fuse_qkv: True
   rope_theta: 500000.0
-  pipeline_cuts: null
+  pipeline_cuts: ["model.layers.18", "model.layers.39", "model.layers.60"] # for pipeline balancing
   
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
