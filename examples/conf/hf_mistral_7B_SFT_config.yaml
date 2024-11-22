@@ -39,7 +39,7 @@ exp_manager:
   load_xser: True
   save_bf16: False
   async_checkpointing: False # default to not use async checkpointing
-  resume_from_checkpoint: /home/ubuntu/pretrained_ckpt/ # manually set the checkpoint file to load from. [SFT change 1 required]
+  resume_from_checkpoint: /home/ubuntu/converted_hf_style_hf_to_nxdt_tp8pp4/ # manually set the checkpoint file to load from. [SFT change 1 required]
 
 distributed_strategy:
   tensor_model_parallel_size: 32
@@ -54,8 +54,8 @@ data:
   global_batch_size: 64
   packing: True # [SFT] used for appending multiple records in a single record until seq length supported by model, if false uses pad tokens till seq length. True increases throughput
   use_sft_style_data_module: True # [SFT/PT] used when we want to set the HF style dataloader for megatron model code.
-  train_dir: /home/ubuntu/mistral_datasets/training.jsonl # [SFT] '/ubuntu/training.jsonl' or arrow file. As for SFT we use HF style dataloader, we also use HF style data file paths [SFT change 2 required]
-  val_dir: /home/ubuntu/mistral_datasets/validation.jsonl # [SFT] '/ubuntu/training.jsonl' or arrow file [SFT change 3 required]
+  train_dir: /home/ubuntu/examples_datasets/mistral_7b/training.jsonl # [SFT] '/ubuntu/training.jsonl' or arrow file. As for SFT we use HF style dataloader, we also use HF style data file paths [SFT change 2 required]
+  val_dir: /home/ubuntu/examples_datasets/mistral_7b/validation.jsonl # [SFT] '/ubuntu/training.jsonl' or arrow file [SFT change 3 required]
   dev_choose_samples: 2250 # [SFT] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset [SFT change 4 required]
   seq_length: 4096 # [SFT change 5 required]
   tokenizer:
@@ -68,13 +68,13 @@ model:
   # global_batch_size: 8 # will use more micro batches to reach global batch size
 
   # model architecture
-  model_config: /home/ubuntu/config.json # TODO: Expand this into arguments in this file [SFT change 7 required]
-  encoder_seq_length: 8192
-  max_position_embeddings: 8192
+  model_config: /home/ubuntu/Mistral-7B-v0.1/config.json # TODO: Expand this into arguments in this file [SFT change 7 required]
+  encoder_seq_length: 32768
+  max_position_embeddings: 32768
   num_layers: 32
   hidden_size: 4096
   qkv_linear: True
-  rope_theta: 500000.0
+  rope_theta: 10000.0
   
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
