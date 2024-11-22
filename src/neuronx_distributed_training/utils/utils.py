@@ -11,7 +11,6 @@ def get_lnc_size(lnc):
     if hardware_type == hardware.TRN2:
         if lnc is None:
             lnc = 2
-        assert lnc == 2, f"trn2 lnc config mismatch {lnc} != 2"
     else:
         lnc = 1
     return lnc
