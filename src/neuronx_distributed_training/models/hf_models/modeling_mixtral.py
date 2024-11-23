@@ -260,7 +260,7 @@ class MixtralAttention(MixtralAttentionHF):
             base=self.rope_theta,
         )
 
-        if config.get('move_model_to_device', False):
+        if config.move_model_to_device:
             move_model_to_device(self, xm.xla_device())
 
     def forward(
@@ -422,7 +422,7 @@ class LlamaMLP(LlamaMLPHF):
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
-        if config.get('move_model_to_device', False):
+        if config.move_model_to_device:
             move_model_to_device(self, xm.xla_device())
 
     def forward(self, x):
@@ -447,7 +447,8 @@ class LlamaMLP(LlamaMLPHF):
 
             # We checkpoint the MLP compute too, since we see extra data movement which is more
             # expensive than the recompute in this case.
-            if self.config.get('selective_checkpoint_enabled', False):
+
+            if self.config.selective_checkpoint_enabled:
                 intermediate_states = checkpoint_method(activation_mlp, gate_proj, up_proj)
             else:
                 intermediate_states = self.act_fn(gate_proj) * up_proj
