@@ -6,6 +6,8 @@ import torch
 from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 import sys
+from neuronx_distributed.utils.utils import hardware
+from torch_neuronx.utils import get_platform_target
 from neuronx_distributed_training.models.hf_models.modeling_llama import (
     CoreAttention,
     LlamaDecoderLayer,
@@ -28,7 +30,11 @@ class HFLLamaModule(BaseHfModel):
         config.kv_shared_group_size = self.config.distributed_strategy.get("kv_replicator", 1)
         config.max_position_embeddings = max(config.max_position_embeddings, self.config.model.get("max_position_embeddings"))
         config.use_flash_attention = self.config.model.fusions.flash_attention
-        config.lnc = self.config.trainer.get("lnc", 2)
+        hardware_type = hardware(get_platform_target())
+        if hardware_type==hardware.TRN1:
+            config.lnc = self.config.trainer.get("lnc", 1)
+        if hardware_type==hardware.TRN2:
+            config.lnc = self.config.trainer.get("lnc", 2)
         if self.config.model.get('num_layers', -1) != -1:
             config.num_hidden_layers = self.config.model.get('num_layers')
         if self.config.model.get('hidden_size', -1) != -1:
