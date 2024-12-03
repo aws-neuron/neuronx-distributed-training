@@ -274,7 +274,8 @@ class MixtralAttention(MixtralAttentionHF):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         assert use_cache is False, "KV-Cache flow is not fully supported"
         assert past_key_value is None, "KV-Cache flow is not fully supported"
-        assert attention_mask is None, "Attention mask is handled in CoreAttention"
+        if attention_mask is not None:
+            logger.warning("Attention mask is currently not supported in CoreAttention")
 
         bsz, q_len, _ = hidden_states.size()
 
