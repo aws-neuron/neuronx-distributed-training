@@ -401,15 +401,16 @@ class LlamaAttention(LlamaAttentionHF):
                 value_states = self.v_proj(hidden_states)
 
         if self.config.sequence_parallel_enabled:
-            query_states = query_states.view(q_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
-            key_states = key_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 0, 3)
-            value_states = value_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 0, 3)
+            # q shape: (bsz, num_heads, head_dim, q_len)
+            query_states = query_states.view(q_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 3, 0)
+            key_states = key_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 3, 0)
+            value_states = value_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 3, 0)
         else:
-            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
+            # q shape: (bsz, num_heads, head_dim, q_len)
+            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).permute(0, 2, 3, 1)
+            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).permute(0, 2, 3, 1)
+            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).permute(0, 2, 3, 1)
+        kv_seq_len = key_states.shape[-1]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
@@ -427,7 +428,7 @@ class LlamaAttention(LlamaAttentionHF):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_output = (
-            nki_flash_attn_func(query_states, key_states, value_states, self.lnc)
+            nki_flash_attn_func(query_states, key_states, value_states, self.lnc, transpose_nki_inputs=True)
             if self.use_flash_attention
             else self.core_attn(query_states, key_states, value_states)
         )
@@ -814,8 +815,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
-    sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    cos = cos[position_ids].unsqueeze(1).permute(0, 1, 3, 2)  # [bs, 1, dim, seq_len]
+    sin = sin[position_ids].unsqueeze(1).permute(0, 1, 3, 2)  # [bs, 1, dim, seq_len]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
