@@ -1,0 +1,116 @@
+name: hf_mixtral
+model_source: hf
+seed: 1234
+
+trainer:
+  devices: 32
+  num_nodes: 8
+  max_epochs: -1 # PTL default. In practice, max_steps will be reached first.
+  max_steps: 22500 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
+  log_every_n_steps: 1
+  val_check_interval: 22501
+  check_val_every_n_epoch: null
+  num_sanity_val_steps: 0
+  limit_val_batches: 0
+  limit_test_batches: 0
+  gradient_clip_val: 1.0
+
+exp_manager:
+  log_local_rank_0_only: True # reduce file system access pressure
+  create_tensorboard_logger: True
+  explicit_log_dir: null
+  exp_dir: null
+  name: hf_mixtral
+  resume_if_exists: True
+  resume_ignore_no_checkpoint: True
+  create_checkpoint_callback: True
+  checkpoint_callback_params:
+    monitor: step
+    save_top_k: 1
+    mode: max
+    save_last: False
+    filename: 'hf_mixtral--{step}-{consumed_samples}'
+    model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
+    every_n_train_steps: 200000
+  log_parameter_norm: True # Logs parameter norm across model parallel ranks
+  log_gradient_norm: True # Logs gradient norm across model parallel ranks
+  enable_recovery_time_instrumentation: False # default to not printing the detailing timing for recovery
+  async_checkpointing: False # default to not use async checkpointing
+  save_xser: True
+  load_xser: True
+  resume_from_checkpoint: null # manually set the checkpoint file to load from
+
+distributed_strategy:
+  tensor_model_parallel_size: 32
+  pipeline_model_parallel_size: 4
+  virtual_pipeline_model_parallel_size: 1
+  zero1: True
+  sequence_parallel: True
+  expert_model_parallel_size: 1
+
+data:
+  micro_batch_size: 1 # limited by TRN memory
+  global_batch_size: 128
+  train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama2_tokenized_4k
+
+model:
+  # model architecture
+  encoder_seq_length: 4096
+  model_config: /home/ubuntu/config.json
+  max_position_embeddings: ${.encoder_seq_length}
+  num_layers: 32
+  hidden_size: 4096
+  rope_theta: 1000000.0
+
+  use_cpu_initialization: True # Init weights on the CPU (slow for large models)
+
+  # MoE Configs
+  moe:
+    num_experts: 8 # of ExpertMLPs (explained in background)
+    frequency: 1 # how frequent each layer is MoE i.e. 1 = every layer MoE 
+    dropout: 0.0 # dropout for MoE Layer
+    capacity_factor: 2.0
+    routing_algorithm: top_k # or top_k - sinkhorn must have top_k=1 only topk is currently implemented
+    top_k: 2 # number of top k routing
+    output_router_logits: True
+    router_aux_loss_coef: 0.02
+    normalize_top_k_affinities: True
+
+  # Activation Checkpointing
+  activations_checkpoint_granularity: 'full' # 'selective' or 'full' need to edit this in the config.json
+  activations_checkpoint_recompute: null
+
+  fusions:
+    softmax: True
+    flash_attention: False # Use NKI flash attention
+
+  optim:
+    name: adamw
+    lr: 3e-4
+    weight_decay: 0.1
+    capturable: True
+    betas:
+    - 0.9
+    - 0.95
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 4000
+      constant_steps: 0
+      min_lr: 3.0e-5
+
+precision:
+  type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
+  # Set the following only if precision type is manual, otherwise they will be automatically set.
+  master_weights: True
+  fp32_grad_acc: True
+  fp32_grads_cc: False
+  xla_use_bf16: '0'
+  xla_downcast_bf16: '1'
+  neuron_rt_stochastic_rounding_en: '0'
+
+compiler_flags: '--model-type transformer --enable-saturate-infinity'
+compiler_cache_url: neuron_cache_hf_moe
+aync_exec_max_inflight_requests: 7
+bucket_size_collectives: 1024
+neuron_rt_exec_timeout: 100
+neuron_experimental_compress_rg: False

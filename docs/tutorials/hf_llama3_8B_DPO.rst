@@ -1,12 +1,13 @@
-.. _hf_llama3_8B_SFT:
+.. _hf_llama3_8B_DPO:
 
-HuggingFace Llama3-8B Supervised Fine-tuning
-============================================
+HuggingFace Llama3-8B Direct Preference Optimization (DPO) based Fine-tuning
+============================================================================
 
-In this example, we will compile and finetune pre-trained HF Llama3-8B model
-on a single instance with the ``NeuronxDistributedTraining`` library.
+In this example, we will compile and finetune a pre-trained
+HF Llama3-8B model on a single instance with the ``NxD Training (NxDT)`` library
+using `Direct Preference Optimization (DPO) <https://arxiv.org/pdf/2305.18290>`_.
 The pre-trained Llama3-8B model serves as the foundation, and we will
-build upon this solid base by fine-tuning the model to adapt
+build upon this solid base by fine-tuning and aligning the model to adapt
 it to a specific task or dataset.
 The example has the following main sections:
 
@@ -20,19 +21,20 @@ Setting up the environment
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
+Once you have launched a Trn1 instance,
 Please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
-Next, we will need to install ``NeuronxDistributedTraining`` and its dependencies.
-Please see the following installation guide for installing ``NeuronxDistributedTraining``:
+Next, we will need to install ``NxDT`` and its dependencies.
+Please see the following installation guide for installing ``NxDT``:
 :ref:`NxDT Installation Guide <nxdt_installation_guide>`.
 
 
-SFT-YAML Configuration Overview
+DPO-YAML Configuration Overview
 -------------------------------
 
-You can configure a variety of SFT-specific and model parameters for finetuning through the YAML file.
+You can configure a variety of DPO-specific and model parameters for finetuning through the YAML file.
 
 .. code-block:: yaml
 
@@ -41,12 +43,18 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
 
     data:
         train_dir: /example_datasets/llama3_8b/training.jsonl
-        val_dir: /example_datasets/llama3_8b/validation.json
+        val_dir: null
         dev_choose_samples: 2250
         seq_length: 4096
+
         alignment_strategy:
-            sft:
-                packing: True
+            dpo:
+                kl_beta: 0.01
+                loss_type: sigmoid
+                max_dpo_prompt_length: 2048
+                precompute_ref_log_probs: True
+                truncation_mode: keep_start
+
         tokenizer:
             type: /llama3_tokenizer
 
@@ -57,28 +65,27 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
 **exp_manager**
     **resume_from_checkpoint**
 
-    Manually set the checkpoint file (pretrained checkpoint) to load from
+    Manually set the checkpoint file (pretrained/post-SFT checkpoint) to load from
 
         * **Type**: str
         * **Default**: ``/pretrained_ckpt``
         * **Required**: True (start with pretrained checkpoint)
 
 **data**
-
     **train_dir**
 
-    SFT training data - jsonl or arrow file
+    DPO training data - jsonl or arrow file
 
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
+    As for DPO we use HF style ModelAlignment dataloader, we also use HF style data file paths
 
         * **Type**: str
         * **Required**: True
 
     **val_dir**
 
-    SFT validation data - jsonl or arrow file
+    DPO validation data - jsonl or arrow file
 
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
+    As for DPO we use HF style ModelAlignment dataloader, we also use HF style data file paths
 
         * **Type**: str
         * **Required**: False
@@ -95,6 +102,7 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
     **seq_length**
 
     Set sequence length for the training job
+    For DPO, it is total sequence length of prompt and (chosen/rejected) response concatenated together
 
         * **Type**: integer
         * **Required**: True
@@ -102,18 +110,48 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
     **alignment_strategy**
 
     Set only when using finetuning specific algorithms (SFT, DPO, etc) and related hyperparameters
-    SFT-specific parameters.
+    DPO-specific parameters.
 
-        **sft**
-            **packing**
+        **dpo**
+            **kl_beta**
 
-            Appends multiple records in a single record until seq length
-            supported by model, if false uses pad tokens to reach seq length.
-            Setting it to True increases throughput but might impact accuracy.
+            KL-divergence beta to control divergence of policy model from reference model
+
+                * **Type**: float
+                * **Default**: 0.01
+                * **Required**: True
+
+            **loss_type**
+
+            Currently support sigmoid version of optimized dpo loss
+
+                * **Type**: str
+                * **Default**: ``sigmoid``
+                * **Required**: True
+
+            **max_dpo_prompt_length**
+
+            Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
+
+                * **Type**: integer
+                * **Required**: True
+
+            **precompute_ref_log_probs**
+
+            To enable precomputation of reference model log probabilities using pre-fit hook,
+            False is not supported currently
 
                 * **Type**: bool
-                * **Default**: False
-                * **Required**: False
+                * **Required**: True
+
+            **truncation_mode**
+
+            To define how to truncate if size (prompt+response) exceeds seq_length
+            options: ["keep_start", "keep_end"]
+
+                * **Type**: str
+                * **Default**: ``keep_start```
+                * **Required**: True
 
     **tokenizer**
         **type**
@@ -136,22 +174,71 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of `databricks-dolly` instruction-following
+This tutorial makes use of a preprocessed version of `intel-orca_dpo_pairs` preference
 dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
-by running the following commands on the head node or your trn1 instance:
+by running the following AWS CLI commands on the head node or your Trn1 instance:
 
 .. code-block:: bash
 
     export DATA_DIR=~/examples_datasets/llama3_8b
     mkdir -p ${DATA_DIR} && cd ${DATA_DIR}
-    aws s3 cp s3://neuron-s3/training_datasets/llama/sft/training.jsonl .  --no-sign-request
-    aws s3 cp s3://neuron-s3/training_datasets/llama/sft/validation.jsonl .  --no-sign-request
+    aws s3 cp s3://neuron-s3/training_datasets/llama/dpo/data_dpo.jsonl .  --no-sign-request
+
+
+Convert data to DPO-specific Preference data format
+---------------------------------------------------
+
+If you directly downloaded the `Intel ORCA_dpo_pairs dataset <https://huggingface.co/datasets/Intel/orca_dpo_pairs>`_, then you need to convert the
+data into preference dataset format using the script below.
+
+.. note::
+    For different datasets with different field names, make necessary changes to the script accordingly.
+
+.. code-block:: python
+
+    from datasets import load_dataset
+    from transformers import AutoTokenizer
+
+    def preference_data_format(example):
+
+        system = "<|im_start|>\n" + example['system'] + "<|im_end|>\n"
+
+        # Format instruction
+        prompt = "<|im_start|> " + example['question'] + "<|im_end|>\n<|im_start|>assistant\n"
+
+        # Format chosen answer
+        chosen = example['chosen'] + "<|im_end|>\n"
+
+        # Format rejected answer
+        rejected = example['rejected'] + "<|im_end|>\n"
+
+        return {
+            "prompt": system + prompt,
+            "chosen": chosen,
+            "rejected": rejected,
+        }
+
+    # Particular dataset with following fields: "system", "question", "chosen", "rejected"
+    dataset = load_dataset("json", data_files="orca_rlhf.jsonl", split="train")
+
+    # Save columns
+    original_columns = dataset.column_names
+
+    # Format dataset
+    dataset = dataset.map(
+        preference_data_format,
+        remove_columns=original_columns
+        )
+
+    # save converted preference dataset
+    dataset.to_json("data_dpo.jsonl")
 
 
 Download pretrained model checkpoint and tokenizer
 --------------------------------------------------
 
-In this tutorial, we will use a pretrained Llama3-8B checkpoint from the original repository.
+In this tutorial, we will use a pretrained Llama3-8B checkpoint (post-SFT checkpoint preferred)
+from the original repository.
 Follow the steps to download tokenizer and model checkpoint from
 the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
 
@@ -165,7 +252,7 @@ Modify the following paths in YAML file based on your specific directory configu
 4. ``train_dir`` and ``val_dir``
 
 You can use your custom model, pretrained checkpoint and tokenizer by
-modifying the ``hf_llama3_8B_SFT_config.yaml`` file.
+modifying the ``hf_llama3_8B_DPO_config.yaml`` file.
 
 
 Checkpoint Conversion
@@ -173,7 +260,7 @@ Checkpoint Conversion
 
 Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
 HF-style Llama3-8B checkpoint
-to NxDT supported format and store it in  ``pretrained_ckpt`` directory.
+to NxDT supported format and store it in ``pretrained_ckpt`` directory.
 Modify the config parameter ``exp_manager.resume_from_checkpoint`` path to the
 converted pretrained checkpoint path.
 
@@ -195,7 +282,7 @@ which is considerably faster than the JIT flow.
 First, ensure that you are using the proper config file in the ``conf/`` directory.
 In the ``train.sh`` file, ensure that the ``CONF_FILE`` variable is properly
 set to the config for the model you want to use. In our case,
-it will be ``hf_llama3_8B_SFT_config``. The default config here is a 8B parameter model,
+it will be ``hf_llama3_8B_DPO_config``. The default config here is a 8B parameter model,
 but users can also add their own ``conf/*.yaml`` files and run different configs and
 hyperparameters if desired. Please see :ref:`Config Overview <nxdt_config_overview>`
 for examples and usage for the ``.yaml`` config files.
@@ -213,9 +300,9 @@ and you will see logs similar to this:
 
 .. code-block:: bash
 
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total graphs: 22
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total successful compilations: 22
-    2024-08-11 23:04:08.000738: INFO ||PARALLEL_COMPILE||: Total failed compilations: 0
+    2024-10-24 18:49:49.000950: INFO ||NEURON_PARALLEL_COMPILE||: Total graphs: 32
+    2024-10-24 18:49:49.000950: INFO ||NEURON_PARALLEL_COMPILE||: Total successful compilations: 32
+    2024-10-24 18:49:49.000950: INFO ||NEURON_PARALLEL_COMPILE||: Total failed compilations: 0
 
 Then, you know your compilation has successfully completed.
 
@@ -245,9 +332,9 @@ Example:
 
 .. code-block:: bash
 
-    Epoch 0:   0%|          | 189/301501 [59:12<1573:03:24, 18.79s/it, loss=7.75, v_num=3-16, reduced_train_loss=7.560, global_step=188.0, consumed_samples=24064.0]
-    Epoch 0:   0%|          | 190/301501 [59:30<1572:41:13, 18.79s/it, loss=7.74, v_num=3-16, reduced_train_loss=7.560, global_step=189.0, consumed_samples=24192.0]
-    Epoch 0:   0%|          | 191/301501 [59:48<1572:21:28, 18.79s/it, loss=7.73, v_num=3-16, reduced_train_loss=7.910, global_step=190.0, consumed_samples=24320.0]
+    Epoch 0:   0%|          | 1/250 [00:20<1:26:16, 20.79s/it, loss=2.24, v_num=9-50, reduced_train_loss=2.240, global_step=0.000, consumed_samples=4.000]
+    Epoch 0:   1%|          | 2/250 [00:38<1:18:33, 19.01s/it, loss=6.45, v_num=9-50, reduced_train_loss=2.240, global_step=1.000, consumed_samples=8.000]
+    Epoch 0:   1%|          | 3/250 [00:45<1:02:29, 15.18s/it, loss=6.45, v_num=9-50, reduced_train_loss=2.240, global_step=1.000, consumed_samples=8.000]
 
 Monitoring Training
 -------------------
@@ -297,5 +384,5 @@ to capture performance and utilization statistics and to understand NeuronCore a
 Troubleshooting Guide
 ---------------------
 
-For issues with ``NeuronxDistributedTraining``, please see:
+For issues with ``NxDT``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`

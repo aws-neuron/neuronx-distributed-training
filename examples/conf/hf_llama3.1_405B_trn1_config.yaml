@@ -4,11 +4,11 @@ seed: 1234
 
 trainer:
   devices: 32
-  num_nodes: 1
+  num_nodes: 64
   max_epochs: -1 # PTL default. In practice, max_steps will be reached first.
-  max_steps: 10000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
+  max_steps: 30000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
   log_every_n_steps: 1
-  val_check_interval: 10001 # we do not want val to run during training, hence setting it at a high number
+  val_check_interval: 30001 # we do not want val to run during training, hence setting it at a high number
   check_val_every_n_epoch: null
   num_sanity_val_steps: 0
   limit_val_batches: 0.0
@@ -29,10 +29,9 @@ exp_manager:
     save_top_k: 1
     mode: max
     save_last: False
-    filename: 'hf_llama--{step}-{consumed_samples}'
+    filename: 'hf_llama3.1_405B--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
-    every_n_train_steps: 10
-    use_master_weights_in_ckpt: False
+    every_n_train_steps: 1000
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
   log_gradient_norm: True # Logs gradient norm across model parallel ranks
   enable_recovery_time_instrumentation: False # default to not printing the detailing timing for recovery
@@ -43,17 +42,17 @@ exp_manager:
   resume_from_checkpoint: null # manually set the checkpoint file to load from 
 
 distributed_strategy:
-  tensor_model_parallel_size: 8
-  pipeline_model_parallel_size: 1
+  tensor_model_parallel_size: 32
+  pipeline_model_parallel_size: 32
   virtual_pipeline_model_parallel_size: 1
   zero1: True
   sequence_parallel: True
-  kv_replicator: 1
+  kv_replicator: 4
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
-  global_batch_size: 1024
-  train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama2_7B_tokenized_4k
+  micro_batch_size: 1 # limited by TRN memory
+  global_batch_size: 256
+  train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama3_tokenized_8k
 
 model:
   # specify micro_batch_size, global_batch_size, and model parallelism
@@ -61,37 +60,40 @@ model:
 
   # model architecture
   model_config: /home/ubuntu/config.json # TODO: Expand this into arguments in this file
-  encoder_seq_length: 4096
-  max_position_embeddings: ${.encoder_seq_length}
-  num_layers: 4
-  hidden_size: 4096
-  qkv_linear: False
+  encoder_seq_length: 8192
+  max_position_embeddings: 131072
+  num_layers: 126
+  hidden_size: 16384
+  qkv_linear: True
+  rope_theta: 500000.0
   
   # Miscellaneous
   use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
 
   ## Activation Checkpointing
-  activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [CoreAttention]
+  activations_checkpoint_granularity: full # 'selective' or 'full'
+  activations_checkpoint_recompute: null
 
   fusions:
     softmax: True
-    flash_attention: False
+    flash_attention: True
   
   do_layer_norm_weight_decay: True
 
   optim:
-    name: adamw_fp32OptState
-    lr: 3e-4
-    weight_decay: 0.01
+    name: adamw
+    lr: 0.000015
+    weight_decay: 0.1
     capturable: False
     betas:
     - 0.9
-    - 0.999
+    - 0.95
     sched:
-      name: LinearAnnealingWithWarmUp
-      warmup_steps: 100
+      name: CosineAnnealing
+      warmup_steps: 2000
       max_steps: ${trainer.max_steps}
+      min_lr: 1e-06
+      constant_steps: 0
 
 precision:
   type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
@@ -102,9 +104,9 @@ precision:
   xla_downcast_bf16: '0'
   neuron_rt_stochastic_rounding_en: '0'
 
-compiler_flags: '--model-type transformer --distribution-strategy=llm-training'
+compiler_flags: '--model-type transformer'
 compiler_cache_url: /home/ubuntu/neuron_cache
-aync_exec_max_inflight_requests: 5
+aync_exec_max_inflight_requests: 3
 bucket_size_collectives: 1024
 neuron_rt_exec_timeout: 100
 neuron_experimental_compress_rg: False
