@@ -29,9 +29,9 @@ exp_manager:
     save_top_k: 1
     mode: max
     save_last: False
-    filename: 'hf_llama3_8B_SFT--{step}-{consumed_samples}'
+    filename: 'hf_llama3_8B_DPO--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
-    every_n_train_steps: 10
+    every_n_train_steps: 1000
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
   log_gradient_norm: True # Logs gradient norm across model parallel ranks
   enable_recovery_time_instrumentation: False # default to not printing the detailing timing for recovery
@@ -39,7 +39,7 @@ exp_manager:
   load_xser: True
   save_bf16: False
   async_checkpointing: False # default to not use async checkpointing
-  resume_from_checkpoint: /home/ubuntu/pretrained_ckpt/ # manually set the checkpoint file to load from. [ModelAlignment change required]
+  resume_from_checkpoint: /home/ubuntu/pretrained_ckpt # manually set the checkpoint file to load from. [ModelAlignment change required]
 
 distributed_strategy:
   tensor_model_parallel_size: 32
@@ -50,15 +50,19 @@ distributed_strategy:
   kv_replicator: 4
 
 data:
-  micro_batch_size: 1 # limited by TRN memory
-  global_batch_size: 64
-  train_dir: /home/ubuntu/training.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
-  val_dir: /home/ubuntu/validation.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file
+  micro_batch_size: 1 # limited by GPU memory
+  global_batch_size: 4 # [DPO] batch size will be twice the global batch size here, since we concatenate and forward chosen and rejected responses per prompt together
+  train_dir: /home/ubuntu/data_dpo.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
+  val_dir: null # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file
   alignment_strategy:
-    sft:
-      packing: True # [SFT] used for appending multiple records in a single record until seq length supported by model, if false uses pad tokens till seq length. True increases throughput
-  dev_choose_samples: 2250 # [SFT] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset [SFT change 4 required]
-  seq_length: 4096 # [SFT change 5 required]
+    dpo:
+      kl_beta: 0.01 # [DPO] kl-divergence beta to control divergence from reference model
+      loss_type: sigmoid # [DPO] support sigmoid versions of optimized dpo loss; options
+      max_dpo_prompt_length: 2048 # [DPO] maximum length of prompt in input
+      precompute_ref_log_probs: True # set to True, precompute reference model probs using pre-fit hook, False is not supported
+      truncation_mode: keep_start # how to truncate if size(prompt+response) exceeds seq_length; options: ["keep_start", "keep_end"]
+  dev_choose_samples: null # [SFT/DPO] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset
+  seq_length: 4096
   tokenizer:
     type: /home/ubuntu/llama3_tokenizer # [SFT change 6 required]
 
@@ -77,24 +81,24 @@ model:
   qkv_linear: True
   fuse_qkv: False
   rope_theta: 500000.0
-  
+
   # Miscellaneous
-  use_cpu_initialization: True # Init weights on the CPU (slow for large models) 
+  use_cpu_initialization: True # Init weights on the CPU (slow for large models)
   weight_init_only: True # [SFT/DPO] Load only model states and ignore the optim states from ckpt directory
-  
+
   ## Activation Checkpointing
-  activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [CoreAttention]
+  activations_checkpoint_granularity: full # 'selective' or 'full'
+  activations_checkpoint_recompute: null
 
   fusions:
     softmax: True
     flash_attention: True
-  
+
   do_layer_norm_weight_decay: True
 
   optim:
     name: adamw_fp32OptState
-    lr: 1.5e-4
+    lr: 5.0e-7
     weight_decay: 0.01
     capturable: False
     betas:
@@ -108,7 +112,7 @@ model:
 precision:
   type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
   # Set the following only if precision type is manual, otherwise they will be automatically set.
-  master_weights: False    
+  master_weights: False
   fp32_grad_acc: False
   xla_use_bf16: '0'
   xla_downcast_bf16: '0'

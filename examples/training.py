@@ -24,10 +24,11 @@ from pytorch_lightning.callbacks.timer import Timer
 from neuronx_distributed_training.lightning_modules.data.megatron import MegatronDataModule
 from neuronx_distributed_training.lightning_modules.model.megatron import MegatronGPTModel
 from neuronx_distributed_training.lightning_modules.data.hf_data_module import HFDataModule
-from neuronx_distributed_training.lightning_modules.data.sft_data_module import SFTDataModule
+from neuronx_distributed_training.lightning_modules.data.model_alignment_data_module import ModelAlignmentDataModule
 from neuronx_distributed_training.lightning_modules.model.hf_models.llama_model import (
     HFLLamaModule,
 )
+
 from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPCheckpointIO,
     NLPDDPStrategy,
@@ -70,17 +71,26 @@ def train(cfg) -> None:
             )
 
     if cfg.model_source == 'megatron':
-        if getattr(cfg.data, "use_sft_style_data_module", False):
-            data_module = SFTDataModule(cfg, trainer)
+        if getattr(cfg.data, "alignment_strategy", False):
+            data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = MegatronDataModule(cfg, trainer)        
         model = MegatronGPTModel(cfg, trainer)
     elif cfg.model_source == 'hf':
-        if getattr(cfg.data, "use_sft_style_data_module", False):
-            data_module = SFTDataModule(cfg, trainer)
+        if getattr(cfg.data, "alignment_strategy", False):
+            data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = HFDataModule(cfg, trainer)
-        model = HFLLamaModule(cfg, trainer)        
+        if "mixtral" in cfg.name:
+            try:
+                from neuronx_distributed_training.lightning_modules.model.hf_models.mixtral_model import (
+                    HFMixtralModule,
+                )
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError("HF transformers package is not the correct version, must be at least 4.36.0.") from e
+            model = HFMixtralModule(cfg, trainer)
+        else:
+            model = HFLLamaModule(cfg, trainer) 
     else:
         raise NotImplementedError
     trainer.fit(model, datamodule=data_module)

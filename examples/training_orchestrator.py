@@ -1,3 +1,5 @@
+"""Load config, set environment variables, start training."""
+
 import hydra
 import os
 
@@ -11,10 +13,21 @@ def set_env_variable(env_var_name, value, append=False, overwrite=False):
         os.environ[env_var_name] = value
 
 def process_config(cfg):
+    """Map default values and set environment variables from config.
+
+    This function may modify the config variable.
+    """
+    # map NeMo default to NxDT default
+    vpmps = cfg.distributed_strategy.get("virtual_pipeline_model_parallel_size", 1)
+    if vpmps is None:
+        cfg.distributed_strategy.virtual_pipeline_model_parallel_size = 1
+    # set environment variables derived from config
     if cfg.model.fusions.get("softmax", None):
         set_env_variable("NEURON_FUSE_SOFTMAX", "1")
     if cfg.neuron_experimental_compress_rg is True:
         set_env_variable("NEURON_EXPERIMENTAL_COMPRESS_RG", "1")
+    else:
+        set_env_variable("NEURON_EXPERIMENTAL_COMPRESS_RG", "0")
     set_env_variable("NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS", str(cfg.aync_exec_max_inflight_requests))
     set_env_variable("BUCKET_CAP_MB", str(cfg.bucket_size_collectives))
     set_env_variable("NEURON_COMPILE_CACHE_URL", cfg.compiler_cache_url)
@@ -22,16 +35,18 @@ def process_config(cfg):
     set_env_variable("NEURON_RT_EXEC_TIMEOUT", str(cfg.neuron_rt_exec_timeout))
 
     # if doing compile then change the some config vars
-    # elif training and have TRAIN_ITERS set (used in tests) set max_steps as TRAIN_ITERS, rest reamins as in '.yaml' file
+    # elif training and have TRAIN_ITERS set (used in tests) set max_steps as TRAIN_ITERS,
+    # rest remains as in '.yaml' file
     # else keep everything the same as in '.yaml' file
-    # NOTE - Specifying TRAIN_ITERS as env variable is used for test purposes only, recommended approach is to update variable in yaml cfg/pass it to script
+    # NOTE - Specifying TRAIN_ITERS as env variable is used for test purposes only,
+    # recommended approach is to update variable in yaml cfg/pass it to script
     if os.environ.get("COMPILE") == "1":
-        cfg.trainer.max_steps = 4
+        cfg.trainer.max_steps = 10
         cfg.exp_manager.create_tensorboard_logger = False
         cfg.exp_manager.create_checkpoint_callback = False
     elif os.environ.get("COMPILE") == "0" and os.environ.get("TRAIN_ITERS") is not None:
         cfg.trainer.max_steps = int(os.environ.get("TRAIN_ITERS"))
-
+    # precision setting
     if cfg.precision.get("type") == "bf16SR":
         set_env_variable("XLA_USE_BF16", "1")
         set_env_variable("XLA_DOWNCAST_BF16", "0")
@@ -46,21 +61,35 @@ def process_config(cfg):
         set_env_variable("XLA_USE_BF16", "0")
         set_env_variable("XLA_DOWNCAST_BF16", "1")
         set_env_variable("NEURON_RT_STOCHASTIC_ROUNDING_EN", "1")
-        set_env_variable("NEURON_CC_FLAGS", "--enable-mixed-precision-accumulation", append=True)  
+        set_env_variable("NEURON_CC_FLAGS", "--enable-mixed-precision-accumulation", append=True)
     elif cfg.precision.get("type") == "fp32":
         set_env_variable("XLA_USE_BF16", "0")
         set_env_variable("XLA_DOWNCAST_BF16", "0")
-        set_env_variable("NEURON_CC_FLAGS", "--auto-cast none", append=True) 
+        set_env_variable("NEURON_CC_FLAGS", "--auto-cast none", append=True)
     elif cfg.precision.get("type") == "manual":
         set_env_variable("XLA_USE_BF16", cfg.precision.get("xla_use_bf16"))
         set_env_variable("XLA_DOWNCAST_BF16", cfg.precision.get("xla_downcast_bf16"))
         set_env_variable("NEURON_RT_STOCHASTIC_ROUNDING_EN", cfg.precision.get("neuron_rt_stochastic_rounding_en"))
+    elif cfg.precision.get("type") == "autocast":
+        set_env_variable("XLA_USE_BF16", "0")
+        set_env_variable("XLA_DOWNCAST_BF16", "0")
+        set_env_variable("NEURON_RT_STOCHASTIC_ROUNDING_EN", "0")
+        set_env_variable("NEURON_CC_FLAGS", "--enable-mixed-precision-accumulation --auto-cast none", append=True)
+    else:
+        raise ValueError(
+            "Invalid option given for precision type. Must be one of "
+            + "bf16SR, fp32, autocast, mixed_precision, mixed_precisionSR, or manual."
+        )
+    return cfg
 
-@hydra.main(config_path="conf",config_name="megatron_gpt_config", version_base="1.2")
+
+@hydra.main(config_path="conf", config_name="megatron_gpt_config", version_base="1.2")
 def main(cfg) -> None:
-    process_config(cfg)
+    cfg = process_config(cfg)
     from training import train
+
     train(cfg)
+
 
 if __name__ == "__main__":
     main()

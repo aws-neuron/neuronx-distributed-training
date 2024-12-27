@@ -30,7 +30,7 @@ pytorch-lightning==1.8.6
 ipadic
 mecab-python3
 protobuf==3.20.3
-datasets==2.19.1
+datasets>=2.19.1
 dill==0.3.8
 nemo_toolkit==1.14
 regex

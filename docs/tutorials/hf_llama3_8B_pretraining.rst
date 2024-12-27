@@ -1,13 +1,10 @@
-.. _hf_llama3_8B_SFT:
+.. _hf_llama3_8B_pretraining:
 
-HuggingFace Llama3-8B Supervised Fine-tuning
-============================================
+HuggingFace Llama3-8B Pretraining
+=================================
 
-In this example, we will compile and finetune pre-trained HF Llama3-8B model
-on a single instance with the ``NxD Training (NxDT)`` library.
-The pre-trained Llama3-8B model serves as the foundation, and we will
-build upon this solid base by fine-tuning the model to adapt
-it to a specific task or dataset.
+In this example, we will compile and train a HF Llama3-8B model on a single instance
+with the ``NxD Training (NxDT)`` library.
 The example has the following main sections:
 
 .. contents:: Table of contents
@@ -21,162 +18,30 @@ Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
 Once you have launched a Trn1 instance,
-Please follow this guide on how to install the latest Neuron packages:
+please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
 Next, we will need to install ``NxDT`` and its dependencies.
 Please see the following installation guide for installing ``NxDT``:
-:ref:`NxDT Installation Guide <nxdt_installation_guide>`.
-
-
-SFT-YAML Configuration Overview
--------------------------------
-
-You can configure a variety of SFT-specific and model parameters for finetuning through the YAML file.
-
-.. code-block:: yaml
-
-    exp_manager:
-        resume_from_checkpoint: /pretrained_ckpt
-
-    data:
-        train_dir: /example_datasets/llama3_8b/training.jsonl
-        val_dir: /example_datasets/llama3_8b/validation.json
-        dev_choose_samples: 2250
-        seq_length: 4096
-        alignment_strategy:
-            sft:
-                packing: True
-        tokenizer:
-            type: /llama3_tokenizer
-
-    model:
-        weight_init_only: True
-
-
-**exp_manager**
-    **resume_from_checkpoint**
-
-    Manually set the checkpoint file (pretrained checkpoint) to load from
-
-        * **Type**: str
-        * **Default**: ``/pretrained_ckpt``
-        * **Required**: True (start with pretrained checkpoint)
-
-**data**
-
-    **train_dir**
-
-    SFT training data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
-
-        * **Type**: str
-        * **Required**: True
-
-    **val_dir**
-
-    SFT validation data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
-
-        * **Type**: str
-        * **Required**: False
-
-    **dev_choose_samples**
-
-    If set, will use that many number of records from the
-    head of the dataset instead of using all. Set to null to use full dataset
-
-        * **Type**: integer
-        * **Default**: null
-        * **Required**: False
-
-    **seq_length**
-
-    Set sequence length for the training job
-
-        * **Type**: integer
-        * **Required**: True
-
-    **alignment_strategy**
-
-    Set only when using finetuning specific algorithms (SFT, DPO, etc) and related hyperparameters
-    SFT-specific parameters.
-
-        **sft**
-            **packing**
-
-            Appends multiple records in a single record until seq length
-            supported by model, if false uses pad tokens to reach seq length.
-            Setting it to True increases throughput but might impact accuracy.
-
-                * **Type**: bool
-                * **Default**: False
-                * **Required**: False
-
-    **tokenizer**
-        **type**
-
-        Set tokenizer path/type
-
-            * **Type**: str
-            * **Default**: ``/llama3_tokenizer``
-            * **Required**: True
-
- **model**
-        **weight_init_only**
-
-        Load only model states and ignore the optim states from ckpt directory
-
-            * **Type**: bool
-            * **Default**: True
+:ref:`NxDT Installation Guide <nxdt_installation_guide>`
 
 
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of `databricks-dolly` instruction-following
-dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
-by running the following AWS CLI commands on the head node or your Trn1 instance:
+This tutorial makes use of a preprocessed and tokenized Wikicorpus
+dataset that is stored in S3.
+The dataset can be downloaded to your cluster or instance by running
+the following AWS CLI commands on the head node or your Trn1 instance:
 
 .. code-block:: bash
 
-    export DATA_DIR=~/examples_datasets/llama3_8b
+    export DATA_DIR=~/examples_datasets/
     mkdir -p ${DATA_DIR} && cd ${DATA_DIR}
-    aws s3 cp s3://neuron-s3/training_datasets/llama/sft/training.jsonl .  --no-sign-request
-    aws s3 cp s3://neuron-s3/training_datasets/llama/sft/validation.jsonl .  --no-sign-request
+    aws s3 cp s3://neuron-s3/training_datasets/llama3/wikicorpus_llama3_tokenized_8k .  --no-sign-request
+    aws s3 cp s3://neuron-s3/training_datasets/llama3/llama3_8B_config.json ~/config.json  --no-sign-request
 
-
-Download pretrained model checkpoint and tokenizer
---------------------------------------------------
-
-In this tutorial, we will use a pretrained Llama3-8B checkpoint from the original repository.
-Follow the steps to download tokenizer and model checkpoint from
-the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
-
-Create a folder ``llama3_tokenizer`` and copy the tokenizer contents to it.
-
-Modify the following paths in YAML file based on your specific directory configuration:
-
-1. ``model.model_config``
-2. ``exp_manager.resume_from_checkpoint``
-3. ``tokenizer.type``
-4. ``train_dir`` and ``val_dir``
-
-You can use your custom model, pretrained checkpoint and tokenizer by
-modifying the ``hf_llama3_8B_SFT_config.yaml`` file.
-
-
-Checkpoint Conversion
-^^^^^^^^^^^^^^^^^^^^^
-
-Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
-HF-style Llama3-8B checkpoint
-to NxDT supported format and store it in  ``pretrained_ckpt`` directory.
-Modify the config parameter ``exp_manager.resume_from_checkpoint`` path to the
-converted pretrained checkpoint path.
 
 Pre-compile the model
 ---------------------
@@ -196,7 +61,7 @@ which is considerably faster than the JIT flow.
 First, ensure that you are using the proper config file in the ``conf/`` directory.
 In the ``train.sh`` file, ensure that the ``CONF_FILE`` variable is properly
 set to the config for the model you want to use. In our case,
-it will be ``hf_llama3_8B_SFT_config``. The default config here is a 8B parameter model,
+it will be ``hf_llama3_8B_config``. The default config here is a 8B parameter model,
 but users can also add their own ``conf/*.yaml`` files and run different configs and
 hyperparameters if desired. Please see :ref:`Config Overview <nxdt_config_overview>`
 for examples and usage for the ``.yaml`` config files.
@@ -210,7 +75,7 @@ Next, run the following commands to launch an AOT pre-compilation job on your in
     ./train.sh
 
 The compile output and logs will be shown directly in the terminal
-and you will see logs similar to this:
+and you will see a message similar to this:
 
 .. code-block:: bash
 
@@ -228,7 +93,7 @@ Then, you know your compilation has successfully completed.
 Training the model
 ------------------
 
-The pre-training job is launched almost exactly in the same way as the compile job.
+The pre-training job is launched almost exactly the same as the compile job.
 We now turn off the ``COMPILE`` environment variable and
 run the same training script to start pre-training.
 
@@ -249,6 +114,7 @@ Example:
     Epoch 0:   0%|          | 189/301501 [59:12<1573:03:24, 18.79s/it, loss=7.75, v_num=3-16, reduced_train_loss=7.560, global_step=188.0, consumed_samples=24064.0]
     Epoch 0:   0%|          | 190/301501 [59:30<1572:41:13, 18.79s/it, loss=7.74, v_num=3-16, reduced_train_loss=7.560, global_step=189.0, consumed_samples=24192.0]
     Epoch 0:   0%|          | 191/301501 [59:48<1572:21:28, 18.79s/it, loss=7.73, v_num=3-16, reduced_train_loss=7.910, global_step=190.0, consumed_samples=24320.0]
+
 
 Monitoring Training
 -------------------

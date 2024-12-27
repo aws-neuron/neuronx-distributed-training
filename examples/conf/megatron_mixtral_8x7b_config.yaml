@@ -48,9 +48,10 @@ distributed_strategy:
   zero1: True
   sequence_parallel: True
   expert_model_parallel_size: 1
+  token_shuffle_group_size: 1
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 128
   # Path to data must be specified by the user.
   # Supports List, String and Dictionary
@@ -127,7 +128,7 @@ model:
     num_experts: 8 # of ExpertMLPs (explained in background)
     frequency: 1 # how frequent each layer is MoE i.e. 1 = every layer MoE 
     dropout: 0.0 # dropout for MoE Layer
-    capacity_factor: 2.0 
+    capacity_factor: 2.0
     routing_algorithm: top_k # or top_k - sinkhorn must have top_k=1
     router_activation: sigmoid # or softmax
     sinkhorn_iterations: 30 # number of sinkhorn based routing iterations at top-1 experts
@@ -168,11 +169,10 @@ precision:
   xla_use_bf16: '0'
   xla_downcast_bf16: '1'
   neuron_rt_stochastic_rounding_en: '0'
-  
+
 compiler_flags: '--model-type transformer --enable-saturate-infinity'
 compiler_cache_url: neuron_cache
 aync_exec_max_inflight_requests: 7
 bucket_size_collectives: 1024
 neuron_rt_exec_timeout: 100
 neuron_experimental_compress_rg: False
-
