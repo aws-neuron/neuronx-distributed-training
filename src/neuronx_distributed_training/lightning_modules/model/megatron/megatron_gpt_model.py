@@ -49,7 +49,7 @@ from neuronx_distributed.parallel_layers.layers import (
 from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.trainer.trainer import Trainer
 
-from neuronx_distributed.modules.rms_norm import RMSNorm
+from neuronx_distributed_training.models.megatron.fused_layer_norm import MixedFusedRMSNorm
 from neuronx_distributed_training.models.megatron.gpt_model import GPTModel
 from neuronx_distributed_training.models.megatron.transformer import (
     ParallelTransformerLayer,
@@ -65,7 +65,7 @@ class ModelModule:
         self.is_resuming_from_checkpoint = is_resuming_from_checkpoint
 
     def build_model(self, nxd_config):
-        leaf_module_cls = [MixedFusedLayerNorm.__name__, RMSNorm.__name__]
+        leaf_module_cls = [MixedFusedLayerNorm.__name__, MixedFusedRMSNorm.__name__]
         nxd_config["pipeline_config"].update(
             {
                 "transformer_layer_cls": ParallelTransformerLayer,
@@ -131,7 +131,6 @@ class ModelModule:
             num_kv_heads=self.config.model.get("num_kv_heads", None),
             sliding_window=self.config.model.get("sliding_window_size", None),
             expert_model_parallel_size = self.config.distributed_strategy.get('expert_model_parallel_size', 1),
-            token_shuffle_group_size = self.config.distributed_strategy.get('token_shuffle_group_size', 1),
             num_moe_experts = num_moe_experts,
             moe_top_k = moe_top_k,
             moe_frequency = moe_config.get('frequency', 1),
@@ -202,13 +201,12 @@ class MegatronGPTModel(MegatronBaseModel):
             total_batches = len(batch_for_pipeline)
             for batch in batch_for_pipeline:
                 tokens, labels, loss_mask, _, position_ids = batch
-                with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
-                    output = self.model(
-                        tokens.to(device),
-                        position_ids.to(device),
-                        labels=labels.to(device),
-                        loss_mask=loss_mask.to(device),
-                    )
+                output = self.model(
+                    tokens.to(device),
+                    position_ids.to(device),
+                    labels=labels.to(device),
+                    loss_mask=loss_mask.to(device),
+                )
                 loss = output[0] if self.save_logits else output
                 # Want to run the loss in fp32 so that the division and sum are not affect by dp degree
                 if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
@@ -220,13 +218,12 @@ class MegatronGPTModel(MegatronBaseModel):
         else:
             tokens, labels, loss_mask, _, position_ids = self.trainer.datamodule.process_global_batch(batch)
             fwd_bwd_fn = self.model.run_train if is_training else self.model.run_eval
-            with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
-                output = fwd_bwd_fn(
-                    input_ids=tokens,
-                    position_ids=position_ids,
-                    labels=labels,
-                    loss_mask=loss_mask,
-                )
+            output = fwd_bwd_fn(
+                input_ids=tokens,
+                position_ids=position_ids,
+                labels=labels,
+                loss_mask=loss_mask,
+            )
             if parallel_state.get_pipeline_model_parallel_rank() == (
                 parallel_state.get_pipeline_model_parallel_size() - 1
             ):
@@ -236,14 +233,14 @@ class MegatronGPTModel(MegatronBaseModel):
         loss_mean = running_loss / torch.distributed.get_world_size(group=parallel_state.get_data_parallel_group())
         return loss_mean
 
-    def init_weights(self, module, device):
+    def init_weights(self, module):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690
         """
         # Last else should always call super().init_weights() to allow initializing
         # pre-defined layers.
-        if isinstance(module, RMSNorm):
+        if isinstance(module, MixedFusedRMSNorm):
             module.reset_parameters()
         elif isinstance(module, MixedFusedLayerNorm):
             torch.nn.init.ones_(module.weight)
@@ -251,4 +248,4 @@ class MegatronGPTModel(MegatronBaseModel):
         elif isinstance(module, torch.nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=1)
         else:
-            super().init_weights(module, device)
+            super().init_weights(module)

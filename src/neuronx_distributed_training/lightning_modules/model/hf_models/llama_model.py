@@ -27,9 +27,8 @@ class HFLLamaModule(BaseHfModel):
         config.return_dict = False
         config.sequence_parallel_enabled = self.config.distributed_strategy.get("sequence_parallel", False)
         config.qkv_linear = self.config.model.get("qkv_linear", False)
-        config.fuse_qkv = self.config.model.get("fuse_qkv", True)
         config.kv_shared_group_size = self.config.distributed_strategy.get("kv_replicator", 1)
-        config.max_position_embeddings = self.config.model.get("max_position_embeddings", config.max_position_embeddings)
+        config.max_position_embeddings = max(config.max_position_embeddings, self.config.model.get("max_position_embeddings"))
         config.use_flash_attention = self.config.model.fusions.flash_attention
         hardware_type = hardware(get_platform_target())
         if hardware_type==hardware.TRN1:
@@ -69,8 +68,7 @@ class HFLLamaModule(BaseHfModel):
                 "leaf_module_cls": leaf_module_cls,
             }
         )
-        include_buffers = True
-        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, include_buffers, config)
+        return nxd.initialize_parallel_model(self.nxd_config, self.model_provider_func, config)
 
     def model_provider_func(self, config):
         model = LlamaForCausalLM(config)
@@ -95,19 +93,14 @@ class HFLLamaModule(BaseHfModel):
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos()[None, None, :, :].to(torch.float32), emb.sin()[None, None, :, :].to(torch.float32)
 
-    def init_weights(self, module, device):
+    def init_weights(self, module):
         """
         Re-init weights after partition
         Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690
         """
         # Last else should always call super().init_weights() to allow initializing
         # pre-defined layers.
-        for key, nested_module in module._modules.items():
-            if isinstance(nested_module, LlamaRotaryEmbedding):
-                module._modules[key] = LlamaRotaryEmbedding(
-                    nested_module.dim, nested_module.max_position_embeddings, nested_module.base, device
-                    )
         if isinstance(module, LlamaRMSNorm):
             module.weight.data.fill_(1.0)
         else:
-            super().init_weights(module, device)
+            super().init_weights(module)

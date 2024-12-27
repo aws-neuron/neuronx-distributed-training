@@ -7,7 +7,7 @@ Checkpoint Conversion
    :local:
    :depth: 2
 
-The  ``NxD Training (NxDT)`` library provides a versatile checkpoint conversion functionality,
+The  ``NeuronxDistributedTraining (NxDT)`` library provides a versatile checkpoint conversion functionality,
 allowing seamless transition between different model styles. This tutorial aims to provide a
 comprehensive guide through the various use cases and demonstrate how to perform the checkpoint conversions.
 
@@ -102,7 +102,6 @@ The ``checkpoint_converter.py`` script supports the following key arguments:
 - ``--n_layers``: number of layers in the model
 - ``--kv_size_multiplier``: key-value size multiplier
 - ``--qkv_linear``: boolean to specify GQA/non-GQA models
-- ``--fuse_qkv``: boolean to specify fused QKV in GQA models
 
 We recommend enabling xser for significantly faster save and load times.
 Note that if the checkpoint is saved with xser, it can only be loaded with xser,

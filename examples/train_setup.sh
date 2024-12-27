@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o pipefail
 set -e
 
@@ -60,8 +59,14 @@ fi
 export XLA_DISABLE_FUNCTIONALIZATION=0
 
 export HYDRA_FULL_ERROR=1
+export PROCESSES_PER_NODE=32
 export MASTER_ADDR=${HOSTS[0]}
 export MASTER_PORT=41000
+
+export DISTRIBUTED_ARGS="--nproc_per_node $PROCESSES_PER_NODE --nnodes $NTASKS --node_rank $NODEID --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+echo $DISTRIBUTED_ARGS
+
 export MALLOC_ARENA_MAX=128
+
 export CREATE_TB_LOGGER=True
 export CHECKPOINT_CALLBACK=True

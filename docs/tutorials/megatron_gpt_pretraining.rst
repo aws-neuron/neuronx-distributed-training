@@ -4,7 +4,7 @@ Megatron GPT Pretraining
 ========================
 
 In this example, we will compile and train a Megatron GPT model on a single instance or
-on multiple instances using ParallelCluster with the ``NxD Training (NxDT)`` library.
+on multiple instances using ParallelCluster with the ``NeuronxDistributedTraining`` library.
 The example has the following main sections:
 
 .. contents:: Table of contents
@@ -22,7 +22,7 @@ please follow the instructions here to create a cluster:
 `Train your model on ParallelCluster
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/devflows/training/parallelcluster/parallelcluster-training.html>`_
 
-ParallelCluster automates the creation of Trn1 clusters,
+ParallelCluster automates the creation of trn1 clusters,
 and provides the SLURM job management system for scheduling and managing distributed training jobs.
 Please note that the home directory on your ParallelCluster
 head node will be shared with all of the worker nodes via NFS.
@@ -30,13 +30,13 @@ head node will be shared with all of the worker nodes via NFS.
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
-Once you have launched a Trn1 instance or ParallelCluster,
+Once you have launched a trn1 instance or ParallelCluster,
 please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
-Next, we will need to install ``NxDT`` and its dependencies.
-Please see the following installation guide for installing ``NxDT``:
+Next, we will need to install ``NeuronxDistributedTraining`` and its dependencies.
+Please see the following installation guide for installing ``NeuronxDistributedTraining``:
 :ref:`NxDT Installation Guide <nxdt_installation_guide>`
 
 
@@ -45,7 +45,7 @@ Download the dataset
 
 This tutorial makes use of a preprocessed Wikipedia dataset that is stored in S3.
 The dataset can be downloaded to your cluster or instance by running
-the following AWS CLI commands on the head node or your Trn1 instance:
+the following commands on the head node or your trn1 instance:
 
 .. code-block:: bash
 
@@ -237,8 +237,9 @@ to capture performance and utilization statistics and to understand NeuronCore a
 Troubleshooting Guide
 ---------------------
 
-For issues with ``NxDT``, please see:
+For issues with ``NeuronxDistributedTraining``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`
 
 For ParallelCluster issues see:
 `AWS ParallelCluster Troubleshooting <https://docs.aws.amazon.com/parallelcluster/latest/ug/troubleshooting-v3.html>`_
+
