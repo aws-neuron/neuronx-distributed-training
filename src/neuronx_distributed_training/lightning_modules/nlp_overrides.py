@@ -35,6 +35,7 @@ import neuronx_distributed as nxd
 import pytorch_lightning as pl
 import torch
 import torch.multiprocessing as mp
+import torch_xla.core.xla_model as xm
 from lightning_lite.plugins import ClusterEnvironment, XLACheckpointIO
 from lightning_lite.plugins.environments import XLAEnvironment
 from lightning_lite.strategies.launchers.xla import _rank_teardown
@@ -985,6 +986,8 @@ class NLPDDPStrategy(TPUSpawnStrategy):
     def save_checkpoint(
         self, checkpoint: Dict[str, Any], filepath: _PATH, storage_options: Optional[Any] = None
     ) -> None:
+        # exp_manager calls this on_train_batch_end before fwd/bwd/optimizer tracing is finished
+        xm.mark_step()
         self.checkpoint_io.save_checkpoint(checkpoint, filepath, self.is_save_type_xser())
 
     def is_load_type_xser(self):
@@ -1108,8 +1111,6 @@ class NLPDDPStrategy(TPUSpawnStrategy):
                 "Currently, the TPUSpawnStrategy only supports `sum`, `mean`, `avg` for the reduce operation, got:"
                 f" {reduce_op}"
             )
-
-        import torch_xla.core.xla_model as xm
 
         xm.mark_step()
         torch.distributed.all_reduce(
