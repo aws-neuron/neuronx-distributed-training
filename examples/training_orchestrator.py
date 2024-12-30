@@ -10,6 +10,7 @@ def set_env_variable(env_var_name, value, append=False, overwrite=False):
     elif os.environ.get(env_var_name, None) is None:
         os.environ[env_var_name] = value
 
+
 def process_config(cfg):
     if cfg.model.fusions.get("softmax", None):
         set_env_variable("NEURON_FUSE_SOFTMAX", "1")
