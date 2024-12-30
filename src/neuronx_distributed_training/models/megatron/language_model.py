@@ -96,6 +96,7 @@ def get_language_model(
     moe_top_k=1,
     output_router_logits=False,
     expert_model_parallel_size=1,
+    token_shuffle_group_size=1,
     router_aux_loss_coef=0.02,
     normalize_top_k_affinities=True,
 ):
@@ -179,9 +180,10 @@ def get_language_model(
         moe_top_k=moe_top_k,
         output_router_logits=output_router_logits,
         expert_model_parallel_size=expert_model_parallel_size,
+        token_shuffle_group_size=token_shuffle_group_size,
         router_aux_loss_coef=router_aux_loss_coef,
         normalize_top_k_affinities=normalize_top_k_affinities,
-)
+    )
 
     # key used for checkpoints.
     language_model_key = "language_model"
@@ -403,6 +405,7 @@ class TransformerLanguageModel(MegatronModule):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         normalize_top_k_affinities=True,
     ):
@@ -511,6 +514,7 @@ class TransformerLanguageModel(MegatronModule):
             moe_top_k=moe_top_k,
             output_router_logits=output_router_logits,
             expert_model_parallel_size=expert_model_parallel_size,
+            token_shuffle_group_size=token_shuffle_group_size,
             router_aux_loss_coef=router_aux_loss_coef,
             normalize_top_k_affinities=normalize_top_k_affinities,
         )
@@ -579,8 +583,9 @@ class TransformerLanguageModel(MegatronModule):
             encoder_output = enc_hidden_states.to(encoder_input.dtype)
 
         if self.output_router_logits:
-            encoder_output = encoder_output[0]
-            router_logits = encoder_output[-1]
-        
-        encoder_output = self.output_layer(encoder_output[0] if self.output_router_logits else encoder_output)
+            combined_output = encoder_output
+            encoder_output = combined_output[0]
+            router_logits = combined_output[1]
+
+        encoder_output = self.output_layer(encoder_output)
         return (encoder_output, router_logits) if self.output_router_logits else encoder_output

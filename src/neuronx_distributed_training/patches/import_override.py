@@ -13,6 +13,26 @@ else:
     string_classes = None
     inf = None
 
+import transformers
+
+def transformers_device_check_patch():
+    # Conflict with latest transformers version, rm when transformers version bumped
+    if not hasattr(transformers.utils, 'is_torch_mlu_available'):
+        # If not, define it as a dummy function
+        def is_torch_mlu_available():
+            return False
+        transformers.utils.is_torch_mlu_available = is_torch_mlu_available
+
+    if not hasattr(transformers.utils, 'is_torch_npu_available'):
+        def is_torch_npu_available():
+            return False
+        transformers.utils.is_torch_npu_available = is_torch_npu_available
+
+    if not hasattr(transformers.utils, 'is_torch_xpu_available'):
+        def is_torch_xpu_available():
+            return False
+        transformers.utils.is_torch_xpu_available = is_torch_xpu_available
+
 
 # conditionally modify the import
 def modify_torch_six_import():

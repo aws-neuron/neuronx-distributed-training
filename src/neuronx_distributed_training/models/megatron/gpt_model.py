@@ -14,6 +14,7 @@
 
 """GPT-2 model."""
 
+import os
 import warnings
 
 import torch
@@ -54,7 +55,14 @@ def post_language_model_processing(
             assert lm_output.dtype == torch.half
             loss = parallel_cross_entropy(lm_output, labels)
         else:
-            loss = parallel_cross_entropy(lm_output.float(), labels)
+            # Upcast input to loss before calculation
+            original_lm_output_dtype = lm_output.dtype
+            if os.environ.get("XLA_DOWNCAST_BF16") == "1":
+                lm_output = lm_output.to(torch.double)
+            loss = parallel_cross_entropy(lm_output, labels)
+
+            # Down casting the final loss
+            loss = loss.to(original_lm_output_dtype)
 
         return loss, logits
 
@@ -126,6 +134,7 @@ class GPTModel(MegatronModule):
         moe_top_k=1,
         output_router_logits=False,
         expert_model_parallel_size=1,
+        token_shuffle_group_size=1,
         router_aux_loss_coef=0.02,
         normalize_top_k_affinities=True,
     ):
@@ -226,6 +235,7 @@ class GPTModel(MegatronModule):
             moe_top_k=moe_top_k,
             output_router_logits=output_router_logits,
             expert_model_parallel_size=expert_model_parallel_size,
+            token_shuffle_group_size=token_shuffle_group_size,
             router_aux_loss_coef=router_aux_loss_coef,
             normalize_top_k_affinities=normalize_top_k_affinities,
         )

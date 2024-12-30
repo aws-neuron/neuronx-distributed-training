@@ -10,6 +10,9 @@ from neuronx_distributed.parallel_layers.layers import (
 from neuronx_distributed_training.utils.model_utils import get_param_groups_by_weight_decay
 
 from ..base import BaseModelModule
+from ..base_dpo import DPOBaseModel
+from omegaconf import DictConfig, open_dict
+from pytorch_lightning.trainer.trainer import Trainer
 
 
 class BaseHfModel(BaseModelModule):

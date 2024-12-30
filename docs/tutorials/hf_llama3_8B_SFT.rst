@@ -4,7 +4,7 @@ HuggingFace Llama3-8B Supervised Fine-tuning
 ============================================
 
 In this example, we will compile and finetune pre-trained HF Llama3-8B model
-on a single instance with the ``NeuronxDistributedTraining`` library.
+on a single instance with the ``NxD Training (NxDT)`` library.
 The pre-trained Llama3-8B model serves as the foundation, and we will
 build upon this solid base by fine-tuning the model to adapt
 it to a specific task or dataset.
@@ -20,12 +20,13 @@ Setting up the environment
 Install Dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
+Once you have launched a Trn1 instance,
 Please follow this guide on how to install the latest Neuron packages:
 `PyTorch Neuron Setup Guide
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/setup/torch-neuronx.html#setup-torch-neuronx>`_.
 
-Next, we will need to install ``NeuronxDistributedTraining`` and its dependencies.
-Please see the following installation guide for installing ``NeuronxDistributedTraining``:
+Next, we will need to install ``NxDT`` and its dependencies.
+Please see the following installation guide for installing ``NxDT``:
 :ref:`NxDT Installation Guide <nxdt_installation_guide>`.
 
 
@@ -136,7 +137,7 @@ Download the dataset
 
 This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
 dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
-by running the following commands on the head node or your trn1 instance:
+by running the following AWS CLI commands on the head node or your Trn1 instance:
 
 .. code-block:: bash
 
@@ -294,5 +295,5 @@ to capture performance and utilization statistics and to understand NeuronCore a
 Troubleshooting Guide
 ---------------------
 
-For issues with ``NeuronxDistributedTraining``, please see:
+For issues with ``NxDT``, please see:
 :ref:`NxDT Known Issues <nxdt_known_issues>`

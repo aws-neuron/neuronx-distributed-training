@@ -1,0 +1,6 @@
+tqdm
+torch
+nltk
+torchmetrics
+datasets
+hydra-core>=1.2.0,<1.3
