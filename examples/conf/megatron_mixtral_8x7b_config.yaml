@@ -137,9 +137,10 @@ model:
     router_aux_loss_coef: 0.02
     normalize_top_k_affinities: True
 
-  # Activation Checkpointing
-  activations_checkpoint_granularity: 'full' # 'selective' or 'full'
-  activations_checkpoint_recompute: null
+  ## Activation Checkpointing
+  # TODO: Full activation checkpointing if broken for Mixtral and requires debug
+  # Issue: Missing grads when PP is enabled
+  activations_checkpoint_granularity: selective # 'selective' or 'full'
 
   fusions:
     softmax: True

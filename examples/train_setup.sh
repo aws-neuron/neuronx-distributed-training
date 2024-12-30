@@ -27,6 +27,7 @@ then
     : ${SLURM_RESTART_COUNT:=0}
     LOG_PATH=logs/$SLURM_JOB_ID/$SLURM_RESTART_COUNT/$NODEID/
     mkdir -p $LOG_PATH
+    export NEURON_COMPILE_CACHE_URL="$HOME/neuron_cache" # Place cache on shared storage to reduce redundant compilations
     # Make sure to install latest runtime
     # ./setup.sh   2>&1  | tee  $LOG_PATH/setup.log
 elif [ -v OMPI_COMM_WORLD_RANK ]
@@ -40,6 +41,7 @@ then
     export EXPLICIT_LOGDIR=/shared/nemo_experiments/$POD_UID
     LOG_PATH=$EXPLICIT_LOGDIR/$NODEID/
     mkdir -p $LOG_PATH
+    export NEURON_COMPILE_CACHE_URL="/shared/neuron_cache" # Place cache on shared storage to reduce redundant compilations
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     export FI_EFA_FORK_SAFE=1

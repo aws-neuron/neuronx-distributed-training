@@ -120,7 +120,6 @@ model:
 
   ## Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
-  activations_checkpoint_recompute: [CoreAttention]
 
   fusions:
     softmax: True

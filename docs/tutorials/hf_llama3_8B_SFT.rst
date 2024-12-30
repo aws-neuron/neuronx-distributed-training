@@ -32,7 +32,7 @@ Please see the following installation guide for installing ``NeuronxDistributedT
 SFT-YAML Configuration Overview
 -------------------------------
 
-You can configure a variety of SFT-specific and model parameters for finetuning through the YAML file.
+You can configuring a bunch of SFT-specific and model parameters for finetuning through the YAML file.
 
 .. code-block:: yaml
 
@@ -40,13 +40,12 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
         resume_from_checkpoint: /pretrained_ckpt
 
     data:
+        packing: True
+        use_sft_data_module: True
         train_dir: /example_datasets/llama3_8b/training.jsonl
-        val_dir: /example_datasets/llama3_8b/validation.json
+        validation_dir: /example_datasets/llama3_8b/validation.json
         dev_choose_samples: 2250
         seq_length: 4096
-        alignment_strategy:
-            sft:
-                packing: True
         tokenizer:
             type: /llama3_tokenizer
 
@@ -64,12 +63,28 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
         * **Required**: True (start with pretrained checkpoint)
 
 **data**
+    **packing**
+
+    Appends multiple records in a single record until seq length
+    supported by model, if false uses pad tokens to reach seq length.
+    Setting it to True increases throughput but might impact accuracy.
+
+        * **Type**: bool
+        * **Default**: False
+        * **Required**: False
+
+    **use_sft_data_module**
+
+    Use HF-SFT style SFT custom dataloader with HF style data file paths.
+
+        * **Type**: bool
+        * **Default**: True
+        * **Required**: True
 
     **train_dir**
 
     SFT training data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
+    As for SFT we use HF style dataloader, we also use HF style data file paths
 
         * **Type**: str
         * **Required**: True
@@ -77,15 +92,14 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
     **val_dir**
 
     SFT validation data - jsonl or arrow file
-
-    As for SFT we use HF style ModelAlignment dataloader, we also use HF style data file paths
+    As for SFT we use HF style dataloader, we also use HF style data file paths
 
         * **Type**: str
-        * **Required**: False
+        * **Required**: True
 
     **dev_choose_samples**
 
-    If set, will use that many number of records from the
+    if set, will use those many number of records from the
     head of the dataset instead of using all. Set to null to use full dataset
 
         * **Type**: integer
@@ -98,22 +112,6 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
 
         * **Type**: integer
         * **Required**: True
-
-    **alignment_strategy**
-
-    Set only when using finetuning specific algorithms (SFT, DPO, etc) and related hyperparameters
-    SFT-specific parameters.
-
-        **sft**
-            **packing**
-
-            Appends multiple records in a single record until seq length
-            supported by model, if false uses pad tokens to reach seq length.
-            Setting it to True increases throughput but might impact accuracy.
-
-                * **Type**: bool
-                * **Default**: False
-                * **Required**: False
 
     **tokenizer**
         **type**
@@ -136,7 +134,7 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
 Download the dataset
 --------------------
 
-This tutorial makes use of a preprocessed version of `databricks-dolly` instruction-following
+This tutorial makes use of a preprocessed version of databricks-dolly instruction-following
 dataset that is stored in S3. The dataset can be downloaded to your cluster or instance
 by running the following commands on the head node or your trn1 instance:
 
@@ -155,7 +153,7 @@ In this tutorial, we will use a pretrained Llama3-8B checkpoint from the origina
 Follow the steps to download tokenizer and model checkpoint from
 the pretraining stage: `<https://llama.meta.com/llama-downloads/>`_
 
-Create a folder ``llama3_tokenizer`` and copy the tokenizer contents to it.
+Create a folder ``/llama3_tokenizer`` and copy the tokenizer contents to it.
 
 Modify the following paths in YAML file based on your specific directory configuration:
 
@@ -165,7 +163,7 @@ Modify the following paths in YAML file based on your specific directory configu
 4. ``train_dir`` and ``val_dir``
 
 You can use your custom model, pretrained checkpoint and tokenizer by
-modifying the ``hf_llama3_8B_SFT_config.yaml`` file.
+modifying ``hf_llama3_8B_SFT_config.yaml`` file.
 
 
 Checkpoint Conversion
@@ -173,9 +171,8 @@ Checkpoint Conversion
 
 Follow this :ref:`Checkpoint Conversion Guide <checkpoint_conversion>` to convert the
 HF-style Llama3-8B checkpoint
-to NxDT supported format and store it in  ``pretrained_ckpt`` directory.
-Modify the config parameter ``exp_manager.resume_from_checkpoint`` path to the
-converted pretrained checkpoint path.
+to NxDT supported format and store it in  ``/pretrained_ckpt/`` directory.
+Modify the ``exp_manager.resume_from_checkpoint`` path to the pretrained checkpoint path.
 
 Pre-compile the model
 ---------------------

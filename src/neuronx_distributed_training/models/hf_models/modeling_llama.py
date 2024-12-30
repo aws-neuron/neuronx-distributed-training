@@ -152,18 +152,6 @@ class LlamaRMSNorm(LlamaRMSNormHF):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class ActivationMultiplyMLP(torch.nn.Module):
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.split_size = config.intermediate_size // get_tensor_model_parallel_size()
-    
-    def forward(self, x):
-        gate_proj, up_proj = x.split(self.split_size, dim=2)
-        intermediate_states = self.act_fn(gate_proj) * up_proj
-        return intermediate_states
-
-
 class LlamaMLP(LlamaMLPHF):
     def __init__(self, config):
         nn.Module.__init__(self)
@@ -171,6 +159,7 @@ class LlamaMLP(LlamaMLPHF):
         self.pretraining_tp = config.pretraining_tp
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
 
         init_method = partial(_init_normal, config.initializer_range)
         self.gate_up_proj = ColumnParallelLinear(
@@ -190,7 +179,7 @@ class LlamaMLP(LlamaMLPHF):
             init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
-        self.activation_multiply = ActivationMultiplyMLP(config)
+        self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
         if config.move_model_to_device:
             move_model_to_device(self, xm.xla_device())
 
@@ -208,7 +197,18 @@ class LlamaMLP(LlamaMLPHF):
             down_proj = [F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.pretraining_tp)]
             down_proj = sum(down_proj)
         else:
-            intermediate_states = self.activation_multiply(self.gate_up_proj(x))
+            gate_proj, up_proj = self.gate_up_proj(x).split(self.split_size, dim=2)
+
+            def activation_mlp(gate_proj, up_proj):
+                activation_output = self.act_fn(gate_proj)
+                return activation_output * up_proj
+
+            # We checkpoint the MLP compute too, since we see extra data movement which is more
+            # expensive than the recompute in this case.
+            if self.config.selective_checkpoint_enabled:
+                intermediate_states = checkpoint_method(activation_mlp, gate_proj, up_proj)
+            else:
+                intermediate_states = self.act_fn(gate_proj) * up_proj
             down_proj = self.down_proj(intermediate_states)
 
         return down_proj
@@ -253,7 +253,6 @@ class LlamaAttention(LlamaAttentionHF):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.use_flash_attention = config.use_flash_attention
-        self.lnc = config.lnc
 
         if not hasattr(config, "kv_shared_group_size"):
             config.kv_shared_group_size = 1
@@ -400,33 +399,20 @@ class LlamaAttention(LlamaAttentionHF):
                 key_states = self.k_proj(hidden_states)
                 value_states = self.v_proj(hidden_states)
 
-        def reshape_and_permute_states(states, bsz, q_len, num_heads, head_dim, use_sequence_parallel):
-            if use_sequence_parallel:
-                return states.view(q_len, bsz, num_heads, head_dim).permute(1, 2, 3, 0)
-            else:
-                return states.view(bsz, q_len, num_heads, head_dim).permute(0, 2, 3, 1)
-
-        def reshape_for_non_flash_attention(states, bsz, q_len, num_heads, head_dim, use_sequence_parallel):
-            if use_sequence_parallel:
-                return states.view(q_len, bsz, num_heads, head_dim).permute(1, 2, 0, 3)
-            else:
-                return states.view(bsz, q_len, num_heads, head_dim).transpose(1, 2)
-
-        if self.use_flash_attention:
-            query_states = reshape_and_permute_states(query_states, bsz, q_len, self.num_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            key_states = reshape_and_permute_states(key_states, bsz, q_len, self.num_key_value_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            value_states = reshape_and_permute_states(value_states, bsz, q_len, self.num_key_value_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            kv_seq_len = key_states.shape[-1]
+        if self.config.sequence_parallel_enabled:
+            query_states = query_states.view(q_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
+            key_states = key_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 0, 3)
+            value_states = value_states.view(q_len, bsz, self.num_key_value_heads, self.head_dim).permute(1, 2, 0, 3)
         else:
-            query_states = reshape_for_non_flash_attention(query_states, bsz, q_len, self.num_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            key_states = reshape_for_non_flash_attention(key_states, bsz, q_len, self.num_key_value_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            value_states = reshape_for_non_flash_attention(value_states, bsz, q_len, self.num_key_value_heads, self.head_dim, self.config.sequence_parallel_enabled)
-            kv_seq_len = key_states.shape[-2]
+            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids, self.use_flash_attention)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -440,7 +426,7 @@ class LlamaAttention(LlamaAttentionHF):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_output = (
-            nki_flash_attn_func(query_states, key_states, value_states, self.lnc)
+            nki_flash_attn_func(query_states, key_states, value_states)
             if self.use_flash_attention
             else self.core_attn(query_states, key_states, value_states)
         )

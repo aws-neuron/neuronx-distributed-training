@@ -35,8 +35,8 @@ from neuronx_distributed_training.lightning_modules.nlp_overrides import (
 )
 from neuronx_distributed_training.utils.exp_manager import exp_manager
 
-
 def train(cfg) -> None:
+
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     plugins = []

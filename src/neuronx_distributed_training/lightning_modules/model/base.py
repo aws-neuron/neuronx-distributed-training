@@ -103,7 +103,6 @@ class BaseModelModule(NLPModel):
     def _initialize_nxd_config(self):
         if self.config.distributed_strategy.get("pipeline_model_parallel_size", 1) > 1:
             model_init_config = {
-                "sequential_move_factor": self.config.trainer.get("sequential_move_factor", 11),
                 "meta_device_init": True,
                 "param_init_fn": self.init_weights,
             }
@@ -138,7 +137,7 @@ class BaseModelModule(NLPModel):
             activation_checkpoint_config=None,  # We set None here and let individual models have their own
             pipeline_config={
                 "num_microbatches": self.num_microbatches,
-                "auto_partition": self.config.model.get("pipeline_cuts", None) is None,
+                "auto_partition": True,
                 "param_init_fn": None,
                 "autowrap_modules": [mappings],
                 "autowrap_functions": [load_balancing_loss_func],
@@ -146,11 +145,9 @@ class BaseModelModule(NLPModel):
                 "use_optimizer_wrapper": True,
                 "return_loss_on_cpu": False,
                 "virtual_pipeline_size": self.config.distributed_strategy.get("virtual_pipeline_model_parallel_size", 1),
-                "pipeline_cuts": self.config.model.get("pipeline_cuts", None),
             },
             model_init_config=model_init_config,
-            mixed_precision_config=mixed_precision_config,
-            lnc_size=self.trainer.lnc,
+            mixed_precision_config=mixed_precision_config
         )
 
     def _get_parameters(self):
@@ -205,33 +202,35 @@ class BaseModelModule(NLPModel):
 
             param_norm = None
             grad_norm = None
-            # only the last stages of the pipeline return losses
-            if self.log_parameter_norm:
-                param_norm = self.calculate_parameter_norm(self.parameters())
-            if self.log_gradient_norm:
-                grad_norm = self._optimizer.grad_norm
+            if full_log:
+                # only the last stages of the pipeline return losses
+                if self.log_parameter_norm:
+                    param_norm = self.calculate_parameter_norm(self.parameters())
+                if self.log_gradient_norm:
+                    grad_norm = self._optimizer.grad_norm
 
-            ## logging
-            # we can only log on one rank if it is rank zero so we broadcast from last rank
-            # we can avoid this broadcast by updating the PTL log function to accept specific ranks
-            torch.distributed.all_reduce(loss_mean, group=parallel_state.get_pipeline_model_parallel_group())
-        if full_log:
-            # TDOD : Consider using run_async = True on step closure. Avoiding that not to minimize functional risk
-            xm.add_step_closure(
-                self.log_metrics,
-                (
-                    self.log,
-                    loss_mean,
-                    lr,
-                    float(self.trainer.global_step),
-                    float(consumed_samples),
-                    grad_norm,
-                    param_norm,
-                    float(throughput),
-                    float(throughput_peak),
-                    self.trainer,
-                ),
-            )
+                ## logging
+                # we can only log on one rank if it is rank zero so we broadcast from last rank
+                # we can avoid this broadcast by updating the PTL log function to accept specific ranks
+                torch.distributed.all_reduce(loss_mean, group=parallel_state.get_pipeline_model_parallel_group())
+
+        # TDOD : Consider using run_async = True on step closure. Avoiding that not to minimize functional risk
+        xm.add_step_closure(
+            self.log_metrics,
+            (
+                self.log,
+                loss_mean,
+                lr,
+                float(self.trainer.global_step),
+                float(consumed_samples),
+                grad_norm,
+                param_norm,
+                float(throughput),
+                float(throughput_peak),
+                full_log,
+                self.trainer,
+            ),
+        )
         xm.mark_step()
 
         return None
@@ -251,12 +250,11 @@ class BaseModelModule(NLPModel):
         return self.forward_backward_step(batch), self.get_batch_length(batch)
 
     def validation_epoch_end(self, outputs):
-        # We want to take the average of all the losses reported in the validation epoch
-        losses_across_val_epoch = [x[0] for x in outputs]
-        averaged_loss_val_epoch = sum(losses_across_val_epoch) / len(losses_across_val_epoch)
+        losses, length = outputs[0]
+        averaged_loss = torch.sum(losses) / torch.sum(torch.tensor(length))
         # we can only log on one rank if it is rank zero so we all_reduce from last rank
         # (effectively a broadcast since we are all_reducing with a zero tensor)
-        torch.distributed.all_reduce(averaged_loss_val_epoch, group=parallel_state.get_pipeline_model_parallel_group())
+        torch.distributed.all_reduce(averaged_loss, group=parallel_state.get_pipeline_model_parallel_group())
 
         def _log_val_loss(log_fn, loss):
             log_fn("val_loss", loss.cpu(), prog_bar=True, on_step=True, rank_zero_only=True, batch_size=1)
@@ -265,7 +263,7 @@ class BaseModelModule(NLPModel):
             _log_val_loss,
             (
                 self.log,
-                averaged_loss_val_epoch.detach(),
+                averaged_loss.detach(),
             ),
         )
 
@@ -595,12 +593,14 @@ class BaseModelModule(NLPModel):
         param_norm,
         throughput,
         throughput_peak,
+        full_log,
         trainer,
     ):
         loss_cpu = loss_mean.detach().cpu()
         trainer.fit_loop.epoch_loop.batch_loop.running_loss.append(loss_cpu)
-        log_fn("reduced_train_loss", loss_cpu, prog_bar=True, rank_zero_only=True)
-        log_fn("lr", lr, prog_bar=True, rank_zero_only=True)
+        if full_log:
+            log_fn("reduced_train_loss", loss_cpu, prog_bar=True, rank_zero_only=True)
+            log_fn("lr", lr, prog_bar=True, rank_zero_only=True)
         if param_norm:
             log_fn("parameter_norm", param_norm.detach().cpu(), prog_bar=True, rank_zero_only=True)
         if grad_norm:
