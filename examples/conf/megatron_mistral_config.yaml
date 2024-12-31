@@ -49,7 +49,7 @@ distributed_strategy:
   sequence_parallel: True
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 1024
   # Path to data must be specified by the user.
   # Supports List, String and Dictionary
@@ -121,6 +121,7 @@ model:
 
   ## Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
+  activations_checkpoint_recompute: [CoreAttention]
 
   fusions:
     softmax: True

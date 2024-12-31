@@ -50,7 +50,7 @@ distributed_strategy:
   kv_replicator: 4
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 1024
   train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama3_tokenized_8k
 
@@ -65,6 +65,7 @@ model:
   num_layers: 32
   hidden_size: 4096
   qkv_linear: True
+  fuse_qkv: True
   rope_theta: 500000.0
   
   # Miscellaneous
@@ -72,6 +73,7 @@ model:
 
   ## Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
+  activations_checkpoint_recompute: [CoreAttention]
 
   fusions:
     softmax: True

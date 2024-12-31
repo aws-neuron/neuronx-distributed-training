@@ -35,6 +35,7 @@ import neuronx_distributed as nxd
 import pytorch_lightning as pl
 import torch
 import torch.multiprocessing as mp
+import torch_xla.core.xla_model as xm
 from lightning_lite.plugins import ClusterEnvironment, XLACheckpointIO
 from lightning_lite.plugins.environments import XLAEnvironment
 from lightning_lite.strategies.launchers.xla import _rank_teardown
@@ -104,6 +105,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 from torchmetrics import Metric
+from neuronx_distributed_training.utils import get_lnc_size
 
 
 def has_len_all_ranks_patched(
@@ -657,10 +659,14 @@ class NLPTrainer(Trainer):
         move_metrics_to_cpu: bool = False,
         multiple_trainloader_mode: str = "max_size_cycle",
         inference_mode: bool = True,
+        lnc: int = None,
+        sequential_move_factor: Optional[int] = None,
     ) -> None:
         Trainer._log_api_event("init")
         logging.info(f"{self.__class__.__name__}: Initializing trainer with parameters: {locals()}")
         self.state = TrainerState()
+        self.lnc = get_lnc_size(lnc)
+        self.sequential_move_factor = sequential_move_factor
 
         if default_root_dir is not None:
             default_root_dir = os.fspath(default_root_dir)
@@ -985,6 +991,8 @@ class NLPDDPStrategy(TPUSpawnStrategy):
     def save_checkpoint(
         self, checkpoint: Dict[str, Any], filepath: _PATH, storage_options: Optional[Any] = None
     ) -> None:
+        # exp_manager calls this on_train_batch_end before fwd/bwd/optimizer tracing is finished
+        xm.mark_step()
         self.checkpoint_io.save_checkpoint(checkpoint, filepath, self.is_save_type_xser())
 
     def is_load_type_xser(self):
@@ -1108,8 +1116,6 @@ class NLPDDPStrategy(TPUSpawnStrategy):
                 "Currently, the TPUSpawnStrategy only supports `sum`, `mean`, `avg` for the reduce operation, got:"
                 f" {reduce_op}"
             )
-
-        import torch_xla.core.xla_model as xm
 
         xm.mark_step()
         torch.distributed.all_reduce(

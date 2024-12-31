@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -o pipefail
 set -e
 
@@ -27,7 +28,6 @@ then
     : ${SLURM_RESTART_COUNT:=0}
     LOG_PATH=logs/$SLURM_JOB_ID/$SLURM_RESTART_COUNT/$NODEID/
     mkdir -p $LOG_PATH
-    export NEURON_COMPILE_CACHE_URL="$HOME/neuron_cache" # Place cache on shared storage to reduce redundant compilations
     # Make sure to install latest runtime
     # ./setup.sh   2>&1  | tee  $LOG_PATH/setup.log
 elif [ -v OMPI_COMM_WORLD_RANK ]
@@ -41,7 +41,6 @@ then
     export EXPLICIT_LOGDIR=/shared/nemo_experiments/$POD_UID
     LOG_PATH=$EXPLICIT_LOGDIR/$NODEID/
     mkdir -p $LOG_PATH
-    export NEURON_COMPILE_CACHE_URL="/shared/neuron_cache" # Place cache on shared storage to reduce redundant compilations
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     export FI_EFA_FORK_SAFE=1
@@ -61,14 +60,8 @@ fi
 export XLA_DISABLE_FUNCTIONALIZATION=0
 
 export HYDRA_FULL_ERROR=1
-export PROCESSES_PER_NODE=32
 export MASTER_ADDR=${HOSTS[0]}
 export MASTER_PORT=41000
-
-export DISTRIBUTED_ARGS="--nproc_per_node $PROCESSES_PER_NODE --nnodes $NTASKS --node_rank $NODEID --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-echo $DISTRIBUTED_ARGS
-
 export MALLOC_ARENA_MAX=128
-
 export CREATE_TB_LOGGER=True
 export CHECKPOINT_CALLBACK=True

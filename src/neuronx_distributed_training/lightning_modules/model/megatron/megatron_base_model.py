@@ -17,7 +17,7 @@
 from nemo.utils import logging
 from omegaconf import DictConfig, open_dict
 from pytorch_lightning.trainer.trainer import Trainer
-
+import sys
 from neuronx_distributed_training.models.megatron.transformer import CoreAttention, NeuronSwitchMLP
 
 from ..base import BaseModelModule
@@ -53,14 +53,20 @@ class MegatronBaseModel(BaseModelModule):
         # We only support selective and full checkpointing. Even in selective,
         # we support only attention checkpointing. Other checkpointing mechanisms
         # would be added on need basis
-        if self.config.model.get("activations_checkpoint_granularity", None) == "selective":
-            if self.config.model.get("moe", False):
-                # NeuronSwitchMLP only used in MoE model
-                self.nxd_config["activation_checkpoint_config"] = (CoreAttention, NeuronSwitchMLP)
-            else:
-                self.nxd_config["activation_checkpoint_config"] = CoreAttention
-        elif self.config.model.get("activations_checkpoint_granularity", None) == "full":
-            self.nxd_config["activation_checkpoint_config"] = "full"
+        activation_recompute_modules = []
+        recompute_modules = self.config.model.get("activations_checkpoint_recompute", [])
+        granularity = self.config.model.get("activations_checkpoint_granularity", None)
+
+        if granularity == "selective":
+            for module in recompute_modules:
+                module_obj = getattr(sys.modules[__name__], module, None)
+                if module_obj is not None:
+                    activation_recompute_modules.append(module_obj)
+        elif granularity == "full":
+            activation_recompute_modules = "full"
+        else:
+            activation_recompute_modules = None
+        self.nxd_config["activation_checkpoint_config"] = activation_recompute_modules
 
     def _validate_and_override_config(self):
         """Certain configurations might be incompatible or discouraged.

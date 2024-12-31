@@ -46,21 +46,14 @@ class HFDataModule(BaseDataModule):
     def get_batch_length(self, batch):
         return len(batch["input_ids"])
     
-    def process_global_batch(self, global_batch, global_batch_size=None):
+    def process_global_batch(self, global_batch, input_names=None, global_batch_size=None):
         """Prepares the global batch for apex fwd/bwd functions.
         Global batch is a list of micro batches.
         """
-        input_ids, attention_mask, labels = global_batch.values()
-        loss_mask = torch.ones(labels.size(), dtype=torch.float)
-        # set the lables with -100 as 0.0            
-        loss_mask[labels == -100] = 0.0            
-        seq_length = input_ids.numel()
-        position_ids = torch.arange(seq_length, dtype=torch.int64).repeat(input_ids.shape[0], 1)
-        return [
-            input_ids,
-            labels,
-            loss_mask,
-            attention_mask,
-            position_ids,
-        ]
+        global_batch_keys = set(global_batch.keys())
+        keys_to_remove = global_batch_keys - set(input_names)
+        for k in keys_to_remove:
+            del global_batch[k]
+
+        return global_batch
 

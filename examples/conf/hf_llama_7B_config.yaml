@@ -51,7 +51,7 @@ distributed_strategy:
   kv_replicator: 1
 
 data:
-  micro_batch_size: 1 # limited by GPU memory
+  micro_batch_size: 1 # limited by TRN memory
   global_batch_size: 1024
   train_dir: /home/ubuntu/examples_datasets/wikicorpus_llama2_7B_tokenized_4k
 
@@ -72,6 +72,7 @@ model:
 
   ## Activation Checkpointing
   activations_checkpoint_granularity: selective # 'selective' or 'full'
+  activations_checkpoint_recompute: [CoreAttention]
 
   fusions:
     softmax: True

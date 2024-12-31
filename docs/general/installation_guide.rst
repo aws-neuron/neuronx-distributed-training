@@ -32,6 +32,7 @@ Install the neuron packages using the command:
 
 .. code-block :: shell
 
+    pip install -U pip
     pip install --upgrade neuronx-cc==2.* torch-neuronx torchvision neuronx_distributed --extra-index-url https://pip.repos.neuron.amazonaws.com
 
 Building Apex
@@ -49,9 +50,9 @@ Since we are built on top of NeMo, we have to install its dependencies too. One 
 
 .. code-block :: shell
 
-    git clone https://github.com/ericharper/apex.git ~/
+    git clone https://github.com/NVIDIA/apex.git
     cd apex
-    git checkout nm_v1.14.0
+    git checkout 23.05
 
 
 2. Replace the contents of the ``setup.py`` with the following contents:
@@ -99,6 +100,9 @@ We can download the ``requirements.txt`` using the command:
 .. code-block :: shell
 
     wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed-training/master/requirements.txt
+
+If you are using a U22 or later OS, please see `Common failures during installation`_,
+as these errors can happen during requirements installation.
 
 We can now install the dependencies of the library using the following command:
 
