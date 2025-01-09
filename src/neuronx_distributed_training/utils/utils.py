@@ -5,6 +5,16 @@ import queue
 import time
 from neuronx_distributed.utils.utils import hardware
 from torch_neuronx.utils import get_platform_target
+import torch
+from typing import Dict, Any
+
+
+# Mapping of string representations to PyTorch data types
+DTYPE_MAP = {
+    'fp16': torch.float16,
+    'fp32': torch.float32,
+    'bf16': torch.bfloat16,
+}
 
 def get_lnc_size(lnc):
     hardware_type = hardware(get_platform_target())
@@ -14,6 +24,10 @@ def get_lnc_size(lnc):
     else:
         lnc = 1
     return lnc
+
+def get_dtype(dtype_str: str) -> torch.dtype:
+    """Convert string representation to PyTorch dtype."""
+    return DTYPE_MAP.get(dtype_str.lower(), torch.bfloat16)
 
 class Throughput:
     def __init__(self, moving_avg_window_size):

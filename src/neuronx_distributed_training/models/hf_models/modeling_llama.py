@@ -183,6 +183,7 @@ class LlamaMLP(LlamaMLPHF):
             gather_output=False,
             init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+            reduce_dtype = self.config.reduce_dtype,
         )
         self.down_proj = RowParallelLinear(
             self.intermediate_size,
@@ -191,6 +192,7 @@ class LlamaMLP(LlamaMLPHF):
             input_is_parallel=True,
             init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+            reduce_dtype = self.config.reduce_dtype,
         )
         self.activation_multiply = ActivationMultiplyMLP(config)
         if config.move_model_to_device:
@@ -283,6 +285,7 @@ class LlamaAttention(LlamaAttentionHF):
                 gather_output=False,
                 init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+                reduce_dtype = self.config.reduce_dtype,
             )
             self.split_size = self.num_heads * self.head_dim // get_tensor_model_parallel_size()
         elif self.config.qkv_linear:
@@ -295,6 +298,7 @@ class LlamaAttention(LlamaAttentionHF):
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
                 kv_size_multiplier=self.config.kv_shared_group_size,
                 fuse_qkv=self.config.fuse_qkv,
+                reduce_dtype = self.config.reduce_dtype,
             )
         else:
             self.q_proj = ColumnParallelLinear(
@@ -304,6 +308,7 @@ class LlamaAttention(LlamaAttentionHF):
                 gather_output=False,
                 init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+                reduce_dtype = self.config.reduce_dtype,
             )
             self.k_proj = ColumnParallelLinear(
                 self.hidden_size,
@@ -312,6 +317,7 @@ class LlamaAttention(LlamaAttentionHF):
                 gather_output=False,
                 init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+                reduce_dtype = self.config.reduce_dtype,
             )
             self.v_proj = ColumnParallelLinear(
                 self.hidden_size,
@@ -320,6 +326,7 @@ class LlamaAttention(LlamaAttentionHF):
                 gather_output=False,
                 init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+                reduce_dtype = self.config.reduce_dtype,
             )
         self.o_proj = RowParallelLinear(
             self.num_heads * self.head_dim,
@@ -328,6 +335,7 @@ class LlamaAttention(LlamaAttentionHF):
             input_is_parallel=True,
             init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
+            reduce_dtype = self.config.reduce_dtype,
         )
         self.num_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size())
         self.num_key_value_heads = neuronx_dist_utils.divide(
@@ -669,7 +677,8 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             bias=False,
             gather_output=False,
             init_method=init_method,
-            sequence_parallel_enabled=config.sequence_parallel_enabled
+            sequence_parallel_enabled=config.sequence_parallel_enabled,
+            reduce_dtype = self.config.reduce_dtype,
         )
         # Initialize weights and apply final processing
         self.post_init()

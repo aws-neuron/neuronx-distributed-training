@@ -101,11 +101,12 @@ model:
 precision:
   type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual'] 
   # Set the following only if precision type is manual, otherwise they will be automatically set.
-  master_weights: False  
+  master_weights: False
   fp32_grad_acc: False
   xla_use_bf16: '0'
   xla_downcast_bf16: '0'
   neuron_rt_stochastic_rounding_en: '0'
+  parallel_layers_reduce_dtype: 'bf16'
 
 # fix: hardcoded trn2 compiler flags to this config, will remove after compiler updates
 compiler_flags: '--model-type transformer --distribution-strategy=llm-training'
