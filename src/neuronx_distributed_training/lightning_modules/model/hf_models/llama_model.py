@@ -45,9 +45,11 @@ class HFLLamaModule(BaseHfModel):
             config.rope_theta = self.config.model.get('rope_theta')
 
         if self.config.precision.type == "fp32":
-            config.reduce_dtype = get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'fp32'))
+            config.reduce_dtype = get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'fp32')) # RS would be in fp32 as there is no implicit downcasting
         else:
-            config.reduce_dtype = get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'bf16'))
+            config.reduce_dtype = torch.bfloat16 # default RS type, this wont get downcasted to anything else, so RS will happen at bf16
+            if get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'bf16')) == torch.float32:
+                config.reduce_dtype = torch.float64
 
         leaf_module_cls = [LlamaRMSNorm.__name__]
         activation_recompute_modules = []
