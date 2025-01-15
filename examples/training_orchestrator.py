@@ -46,6 +46,7 @@ def process_config(cfg):
         cfg.exp_manager.create_checkpoint_callback = False
     elif os.environ.get("COMPILE") == "0" and os.environ.get("TRAIN_ITERS") is not None:
         cfg.trainer.max_steps = int(os.environ.get("TRAIN_ITERS"))
+
     # precision setting
     if cfg.precision.get("type") == "bf16SR":
         set_env_variable("XLA_USE_BF16", "1")
