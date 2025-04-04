@@ -18,6 +18,7 @@ import tempfile
 from neuronx_distributed_training.lightning_modules.data.datasets.ConcatDataset import ConcatDataset
 from neuronx_distributed_training.lightning_modules.data.datasets.PaddedDataset import PaddedDataset, PaddedDPODataset
 from neuronx_distributed_training.lightning_modules.data.base import BaseDataModule
+from neuronx_distributed_training.utils import get_attribute_from_cfg
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ class ModelAlignmentDataModule(BaseDataModule):
 
         def _tokenize_and_modify():
             for algorithm, dispatcher in algorithm_dispatchers.items():
-                if hasattr(self.config.data.alignment_strategy, algorithm) and getattr(self.config.data.alignment_strategy, algorithm):
+                if get_attribute_from_cfg(self.config, f"model_alignment_strategy.{algorithm}", False):
                     return dispatcher
             raise ValueError("No supported algorithm configuration found in the config.")
 
@@ -163,9 +164,9 @@ class ModelAlignmentDataModule(BaseDataModule):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = trl.DPOConfig(
                 output_dir=temp_dir,
-                max_prompt_length=self.config.data.alignment_strategy.dpo.max_dpo_prompt_length,
-                max_length=self.config.data.seq_length,
-                truncation_mode=self.config.data.alignment_strategy.dpo.truncation_mode
+                max_prompt_length=get_attribute_from_cfg(self.config, "max_dpo_prompt_length", 2048),
+                max_length=get_attribute_from_cfg(self.config, "seq_length", 4096),
+                truncation_mode=get_attribute_from_cfg(self.config, "dpo.truncation_mode", "keep_start")
             )
 
         fn_kwargs = {"tokenizer": self.tokenizer, "args": args}
@@ -191,13 +192,13 @@ class ModelAlignmentDataModule(BaseDataModule):
                       'labels':-100,
                       'attention_mask':0}
 
-        if hasattr(self.config.data.alignment_strategy, 'sft'):
+        if hasattr(self.config.model_alignment_strategy, 'sft'):
             data_collator = transformers.DataCollatorForSeq2Seq(self.tokenizer)
-            if getattr(self.config.data.alignment_strategy.sft, "packing", None):
+            if getattr(self.config.model_alignment_strategy.sft, "packing", None):
                 data = ConcatDataset(data, self.tokenizer.eos_token_id, pad_id_map, self.config.data.seq_length) # packs dataset and returns new dataset
             else:
                 data = PaddedDataset(data, pad_id_map, self.config.data.seq_length) # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
-        elif hasattr(self.config.data.alignment_strategy, 'dpo'):
+        elif hasattr(self.config.model_alignment_strategy, 'dpo'):
             data = PaddedDPODataset(data, self.config.data.seq_length)
             # collator is changed to handle keys in DPO input batch {chosen_input_ids, rejected_input_ids, etc}, not handled with transformers seq2seq collator  
             _ensure_trl()

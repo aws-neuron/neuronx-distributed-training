@@ -46,20 +46,19 @@ You can configure a variety of DPO-specific and model parameters for finetuning 
         val_dir: null
         dev_choose_samples: 2250
         seq_length: 4096
-
-        alignment_strategy:
-            dpo:
-                kl_beta: 0.01
-                loss_type: sigmoid
-                max_dpo_prompt_length: 2048
-                precompute_ref_log_probs: True
-                truncation_mode: keep_start
-
         tokenizer:
             type: /llama3_tokenizer
 
     model:
         weight_init_only: True
+
+    model_alignment_strategy:
+        dpo:
+            kl_beta: 0.01
+            loss_type: sigmoid
+            max_dpo_prompt_length: 2048
+            precompute_ref_log_probs: True
+            truncation_mode: keep_start
 
 
 **exp_manager**
@@ -107,12 +106,31 @@ You can configure a variety of DPO-specific and model parameters for finetuning 
         * **Type**: integer
         * **Required**: True
 
-    **alignment_strategy**
+    **tokenizer**
+        **type**
 
-    Set only when using finetuning specific algorithms (SFT, DPO, etc) and related hyperparameters
-    DPO-specific parameters.
+        Set tokenizer path/type
+
+            * **Type**: str
+            * **Default**: ``/llama3_tokenizer``
+            * **Required**: True
+
+ **model**
+        **weight_init_only**
+
+        Load only model states and ignore the optim states from ckpt directory
+
+            * **Type**: bool
+            * **Default**: True
+
+ **model_alignment_strategy**
+
+    Set only when using finetuning specific algorithms (SFT, DPO, etc) and and parameter-efficient
+    fine-tuning methods like LoRA (Low-Rank Adaptation).
 
         **dpo**
+            Direct Preference Optimization (DPO) specific parameters.
+
             **kl_beta**
 
             KL-divergence beta to control divergence of policy model from reference model
@@ -153,23 +171,6 @@ You can configure a variety of DPO-specific and model parameters for finetuning 
                 * **Default**: ``keep_start```
                 * **Required**: True
 
-    **tokenizer**
-        **type**
-
-        Set tokenizer path/type
-
-            * **Type**: str
-            * **Default**: ``/llama3_tokenizer``
-            * **Required**: True
-
- **model**
-        **weight_init_only**
-
-        Load only model states and ignore the optim states from ckpt directory
-
-            * **Type**: bool
-            * **Default**: True
-
 
 Download the dataset
 --------------------
@@ -183,6 +184,21 @@ by running the following AWS CLI commands on the head node or your Trn1 instance
     export DATA_DIR=~/examples_datasets/llama3_8b
     mkdir -p ${DATA_DIR} && cd ${DATA_DIR}
     aws s3 cp s3://neuron-s3/training_datasets/llama/dpo/data_dpo.jsonl .  --no-sign-request
+
+Then, download the ``config.json`` file:
+
+For Llama-3.1-8B:
+
+.. code-block:: bash
+
+   wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama/tp_zero1_llama_hf_pretrain/8B_config_llama3.1/config.json ~/
+
+
+For Llama-3-8B:
+
+.. code-block:: bash
+
+   wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama/tp_zero1_llama_hf_pretrain/8B_config_llama3/config.json ~/
 
 
 Convert data to DPO-specific Preference data format

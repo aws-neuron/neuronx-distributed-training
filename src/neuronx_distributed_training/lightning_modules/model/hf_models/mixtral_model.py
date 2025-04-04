@@ -12,6 +12,12 @@ from neuronx_distributed_training.models.hf_models.modeling_mixtral import (
     MixtralRMSNorm,
     LlamaMLP
 )
+from neuronx_distributed.modules.qkv_linear import GQAQKVColumnParallelLinear
+from neuronx_distributed.parallel_layers.layers import (
+    ColumnParallelLinear,
+    ParallelEmbedding,
+    RowParallelLinear,
+)
 
 from .base_model import BaseHfModel
 
@@ -59,7 +65,7 @@ class HFMixtralModule(BaseHfModel):
             {
                 "transformer_layer_cls": MixtralDecoderLayer,
                 "output_loss_value_spec": (True, False, False, False),
-                "input_names": ["input_ids", "labels"],
+                "input_names": ["input_ids", "attention_mask", "labels"],
                 "leaf_module_cls": leaf_module_cls,
             }
         )
@@ -78,5 +84,11 @@ class HFMixtralModule(BaseHfModel):
         # pre-defined layers.
         if isinstance(module, MixtralRMSNorm):
             module.weight.data.fill_(1.0)
-        else:
-            super().init_weights(module, device)
+        elif isinstance(module, torch.nn.Linear):
+            module.reset_parameters()
+        elif isinstance(module, (ParallelEmbedding, RowParallelLinear, ColumnParallelLinear)):
+            module.init_weight_cpu()
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, GQAQKVColumnParallelLinear):
+            module.initialize_weight_biases()

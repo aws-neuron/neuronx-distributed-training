@@ -83,8 +83,6 @@ from neuronx_distributed.parallel_layers.loss_functions import parallel_cross_en
 from neuronx_distributed.parallel_layers.parallel_state import (
     get_tensor_model_parallel_size,
 )
-from neuronx_distributed.utils.model_utils import move_model_to_device
-
 
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
@@ -195,8 +193,6 @@ class LlamaMLP(LlamaMLPHF):
             reduce_dtype = self.config.reduce_dtype,
         )
         self.activation_multiply = ActivationMultiplyMLP(config)
-        if config.move_model_to_device:
-            move_model_to_device(self, xm.xla_device())
 
     def forward(self, x):
         if self.pretraining_tp > 1:
@@ -344,9 +340,6 @@ class LlamaAttention(LlamaAttentionHF):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         self.core_attn = CoreAttention()
-
-        if config.move_model_to_device:
-            move_model_to_device(self, xm.xla_device())
     
     def _init_rope(self):
         if self.config.rope_scaling is None:

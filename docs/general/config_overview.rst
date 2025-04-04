@@ -59,6 +59,7 @@ and this key allows users to configure the ``trainer``.
     limit_val_batches: 1
     limit_test_batches: 1
     gradient_clip_val: 1.0
+    lnc: 2
     sequential_move_factor: 11
 
 .. note::
@@ -73,6 +74,20 @@ Number of devices to be used for training. If using torchrun, this is equal to `
 
     * **Type**: integer
     * **Required**: True
+
+**lnc**
+
+Neuron-specific setting that specifies the logical-to-physical Neuron Core mapping ratio.
+This parameter determines the number of physical Neuron cores used for each logical Neuron Core.
+
+Values:
+
+- lnc: 1 - Each node exposes 128 logical devices, with a 1:1 mapping between logical and physical Neuron Cores.
+- lnc: 2 - Implements a 2:1 mapping between logical and physical Neuron Cores.
+
+    * **Type**: integer
+    * **Required**: False
+    * **Default**: None (must be explicitly set)
 
 **num_nodes**
 
@@ -295,7 +310,7 @@ feature provided by NeuronxDistributed's
 
 **resume_from_checkpoint**
 
-Set this as the checkpoint file to load from. Check the SFT example config under ``conf`` on how to use it.
+Set this as the checkpoint file to load from. Check the SFT/DPO example config under ``conf`` on how to use it.
 
     * **Type**: str
     * **Default**: null
@@ -372,9 +387,9 @@ Data
 
 This is where we configure the dataset/dataloader. This config is dependent on the dataloader/dataset been
 used. Users can add custom keys in this config and read inside the ``CustomDataModule`` using ``cfg.data``.
-Currently the library adds support for 3 kinds of data modules: ``MegatronDataModule``, ``SFTDataModule``
+Currently the library adds support for 3 kinds of data modules: ``MegatronDataModule``, ``ModelAlignmentDataModule``
 and ``HFDataModule``. To learn about the config parameters of ``MegatronDataModule`` please check the
-``megatron_llama_7B_config.yaml``, for ``SFTDataModule`` check the ``megatron_llama2_7B_SFT_config.yaml``
+``megatron_llama_7B_config.yaml``, for ``ModelAlignmentDataModule`` check the ``megatron_llama2_7B_SFT_config.yaml``
 and for ``HFDataModule``, refer to ``hf_llama3_8B_config.yaml``.
 
 The parameters that are common across all the configs are documented below.
@@ -427,7 +442,8 @@ Let's start with the config for the HF model:
     use_cpu_initialization: True
 
     ## Activation Checkpointing
-    activations_checkpoint_granularity: selective # 'selective' or 'full'
+    activations_checkpoint_granularity: selective
+    activations_checkpoint_recompute: [CoreAttention]
 
     fusions:
         softmax: True
@@ -515,16 +531,29 @@ this flag to ``True``. This parameter is common for all models supported in the 
 
 **activations_checkpoint_granularity**
 
-This flags controls which module needs to be recomputed during the backward pass. Setting it to ``selective`` would recompute
-the ``attention block`` (and ``MLP`` block in case of larger ``8K+`` seq-length for ``Llama models``). Setting to
-``full`` will only save activations of every layer and recompute the entire layer during the backward pass. More
-information on activation recompute can be found
+This flag controls which module needs to be recomputed during the backward pass.
+
+Values:
+
+- ``selective`` - Enables selective recomputation of specified
+                modules in `activations_checkpoint_recompute` during the backward pass.
+- ``full`` - Saves activations at layer boundaries and recomputes the entire layer during the backward pass.
+- ``null`` - Disables activation checkpointing.
+
+More information on activation recompute can be found
 `in this link <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/activation_memory_reduction.html#activation-recomputation>`_.
 This parameter is common for all models supported in the library.
 
     * **Type**: str
     * **Possible Values**: ``selective``, ``full``, ``null``
     * **Required**: True
+
+**activations_checkpoint_recompute**
+This config specifies which modules to recompute when using ``selective`` activation checkpointing.
+It accepts a list of module names as strings or `null`.
+
+    * **Type**: list[str] or `null`
+    * **Required**: False
 
 **fusions.softmax**
 
@@ -768,6 +797,7 @@ This config can help to decide the dtype of the model/optimizer.
         xla_use_bf16: '0'
         xla_downcast_bf16: '0'
         neuron_rt_stochastic_rounding_en: '0'
+        parallel_layers_reduce_dtype: 'bf16'
 
 .. note::
 
@@ -775,39 +805,187 @@ This config can help to decide the dtype of the model/optimizer.
     ``neuron_rt_stochastic_rounding_en`` will be picked up from the config. These parameters are for more finer control of
     precision. It is recommended to use ``mixed_precision`` config for better accuracy.
 
-**mixed_precision**
+**type**
+    **mixed_precision**
 
-This config will use the ``zero1`` optimizer and will keep master weights in ``fp32``. It will also perform grad
-accumulation and ``grad cc`` in ``fp32``. It will also set the ``xla_downcast_bf16``. It will disable stocastic
-rounding.
+    The ``mixed_precision`` config uses the ``zero1`` optimizer. It performs grad accumulation,
+    ``grad cc``, and keeps the master copy of the weights in ``fp32``. It also sets the ``xla_downcast_bf16``
+    environment variable to 1 and disables stochastic rounding.
 
-**mixed_precisionSR**
+    **mixed_precisionSR**
 
-This is a superset config of ``mixed_precision``, only difference been the stochastic rounding. In this case, we set the
-stochastic rounding.
-
-
-**bf16SR**
-
-This config will perform all operations in ``bf16``. It will rely on the stochastic rounding feature to gain accuracy.
+    ``mixed_precisionSR`` is a superset of the ``mixed_precision`` config with stochastic rounding enabled.
 
 
-**autocast**
+    **bf16SR**
 
-This config will follow the exact same precision strategy followed by ``torch.autocast``.
-
-.. note::
-    Autocast is not supported in this release.
-
-**manual**
-
-To gain control of the different precision nobs, one can set the precision type to ``manual`` and control parameters
-like - ``master_weights`` , ``fp32_grad_acc``, ``xla_use_bf16``, ``xla_downcast_bf16`` and
-``neuron_rt_stochastic_rounding_en``.
+    ``bf16SR`` config will perform all operations in ``bf16`` and
+    relies on stochastic rounding feature for accuracy gains.
 
 
-SFT-specific
--------------
+    **autocast**
 
-Follow :ref:`HuggingFace LLama3-8B Supervised Fine-tuning <hf_llama3_8B_SFT>` for SFT-specific
-config to enable finetuning.
+    ``autocast`` config will follow the exact same precision strategy followed by ``torch.autocast``.
+
+    .. note::
+        Autocast is not supported in this release.
+
+    **manual**
+
+    To gain control of the different precision nobs, one can set the precision type to ``manual`` and control parameters
+    like - ``master_weights`` , ``fp32_grad_acc``, ``xla_use_bf16``, ``xla_downcast_bf16`` and
+    ``neuron_rt_stochastic_rounding_en``.
+
+**parallel_layers_reduce_dtype**
+
+This config will perform reduce collectives (all-reduce and reduce-scatter) within parallel layers in the
+specified precision. If ``fp32`` precision type is used, then we implicitly set reduce dtype to ``fp32``.
+Otherwise it will be defaulted to ``bf16`` in all other cases unless specified.
+
+
+Model Alignment Specific
+------------------------
+
+You can configure fine-tuning (SFT) or model alignment (DPO)
+through the YAML file, coupled along with parameter-efficient
+fine-tuning using LoRA.
+
+.. code-block:: yaml
+
+    model_alignment_strategy:
+        # DPO specific config
+        dpo:
+            kl_beta: 0.01
+            loss_type: sigmoid
+            max_dpo_prompt_length: 2048
+            precompute_ref_log_probs: True
+            truncation_mode: keep_start
+
+        # Alternatively, can also use SFT specific config
+        sft:
+            packing: True
+
+        # Parameter-efficient finetuning - LoRA config
+        peft:
+            lora_rank: 16
+            lora_alpha: 32
+            lora_dropout: 0.05
+            lora_bias: "none"
+            lora_verbose: True
+            target_modules: ["qkv_proj"]
+
+
+**model_alignment_strategy**
+
+    Set only when using finetuning specific algorithms (SFT, DPO, etc) and and parameter-efficient
+    fine-tuning methods like LoRA (Low-Rank Adaptation).
+
+        **dpo**
+            Direct Preference Optimization (DPO) specific parameters.
+
+            **kl_beta**
+
+            KL-divergence beta to control divergence of policy model from reference model
+
+                * **Type**: float
+                * **Default**: 0.01
+                * **Required**: True
+
+            **loss_type**
+
+            Currently support sigmoid version of optimized DPO loss
+
+                * **Type**: str
+                * **Default**: ``sigmoid``
+                * **Required**: True
+
+            **max_dpo_prompt_length**
+
+            Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
+
+                * **Type**: integer
+                * **Required**: True
+
+            **precompute_ref_log_probs**
+
+            To enable precomputation of reference model log probabilities using pre-fit hook,
+            False is not supported currently
+
+                * **Type**: bool
+                * **Required**: True
+
+            **truncation_mode**
+
+            To define how to truncate if size (prompt+response) exceeds seq_length
+            options: ["keep_start", "keep_end"]
+
+                * **Type**: str
+                * **Default**: ``keep_start```
+                * **Required**: True
+
+        **sft**
+            SFT-specific parameters.
+
+            **packing**
+
+            Appends multiple records in a single record until seq length
+            supported by model, if false uses pad tokens to reach seq length.
+            Setting it to True increases throughput but might impact accuracy.
+
+                * **Type**: bool
+                * **Default**: False
+                * **Required**: False
+
+
+        **peft**
+            Configuration options for Parameter-Efficient Fine-Tuning (PEFT) methods,
+            specifically LoRA settings.
+
+            **lora_rank**
+
+            Rank of LoRA; determines the number of trainable parameters
+            Higher rank allows for more expressive adaptations but increases memory usage
+
+                * **Type**: int
+                * **Default**: 16
+                * **Required**: True
+
+            **lora_alpha**
+
+            Scaling factor for LoRA updates; affects the magnitude of LoRA adaptations.
+
+                * **Type**: int
+                * **Default**: 32
+                * **Required**: True
+
+            **lora_dropout**
+
+            Dropout rate for LoRA layers to prevent overfitting.
+
+                * **Type**: float
+                * **Default**: 0.05
+                * **Required**: False
+
+            **lora_bias**
+
+            Bias type for LoRA. Determines which biases are trainable. Can be 'none', 'all' or 'lora_only'
+
+                * **Type**: str
+                * **Default**: "none"
+                * **Required**: False
+
+            **lora_verbose**
+
+            Enables detailed LoRA-related logging during training.
+
+                * **Type**: bool
+                * **Default**: False
+                * **Required**: False
+
+            **target_modules**
+
+            List of model layers to apply LoRA.
+
+                * **Type**: list[str]
+                * **Default**: ["qkv_proj"] (for Llama)
+                * **Required**: True

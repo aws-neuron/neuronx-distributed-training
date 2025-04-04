@@ -42,6 +42,21 @@ the following AWS CLI commands on the head node or your Trn1 instance:
     aws s3 cp s3://neuron-s3/training_datasets/llama3/wikicorpus_llama3_tokenized_8k .  --no-sign-request
     aws s3 cp s3://neuron-s3/training_datasets/llama3/llama3_8B_config.json ~/config.json  --no-sign-request
 
+Then, download the ``config.json`` file:
+
+For Llama-3.1-8B:
+
+.. code-block:: bash
+
+   wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama/tp_zero1_llama_hf_pretrain/8B_config_llama3.1/config.json ~/
+
+
+For Llama-3-8B:
+
+.. code-block:: bash
+
+   wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama/tp_zero1_llama_hf_pretrain/8B_config_llama3/config.json ~/
+
 
 Pre-compile the model
 ---------------------

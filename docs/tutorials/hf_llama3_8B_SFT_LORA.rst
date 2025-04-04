@@ -1,10 +1,13 @@
-.. _hf_llama3_8B_SFT:
+.. _hf_llama3_8B_SFT_LORA:
 
-HuggingFace Llama3-8B Supervised Fine-tuning
-============================================
+HuggingFace Llama3-8B Efficient Supervised Fine-tuning with LoRA
+================================================================
 
 In this example, we will compile and finetune pre-trained HF Llama3-8B model
-on a single instance with the ``NxD Training (NxDT)`` library.
+with LoRA adaptors on a single instance with the ``NxD Training (NxDT)`` library.
+LoRA or Low Rank Adaptation allows for efficient parameter-efficient fine-tuning (PEFT) by adding small trainable rank
+decomposition matrices to specified layer of the model, significantly
+reducing memory usage and training time compared to dense fine-tuning.
 The pre-trained Llama3-8B model serves as the foundation, and we will
 build upon this solid base by fine-tuning the model to adapt
 it to a specific task or dataset.
@@ -30,10 +33,10 @@ Please see the following installation guide for installing ``NxDT``:
 :ref:`NxDT Installation Guide <nxdt_installation_guide>`.
 
 
-SFT-YAML Configuration Overview
--------------------------------
+LoRA SFT-YAML Configuration Overview
+------------------------------------
 
-You can configure a variety of SFT-specific and model parameters for finetuning through the YAML file.
+You can configure a variety of SFT, DPO, PEFT-specfic and model parameters for finetuning through the YAML file.
 
 .. code-block:: yaml
 
@@ -54,6 +57,14 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
     model_alignment_strategy:
         sft:
             packing: True
+        peft:
+            lora_rank: 16
+            lora_alpha: 32
+            lora_dropout: 0.05
+            lora_bias: "none"
+            lora_verbose: True
+            target_modules: ["qkv_proj"]
+
 
 **exp_manager**
     **resume_from_checkpoint**
@@ -135,6 +146,60 @@ You can configure a variety of SFT-specific and model parameters for finetuning 
                 * **Default**: False
                 * **Required**: False
 
+        **peft**
+            Configuration options for Parameter-Efficient Fine-Tuning (PEFT) methods,
+            specifically LoRA settings.
+
+            **lora_rank**
+
+            Rank of LoRA; determines the number of trainable parameters
+            Higher rank allows for more expressive adaptations but increases memory usage
+
+                * **Type**: int
+                * **Default**: 16
+                * **Required**: True
+
+            **lora_alpha**
+
+            Scaling factor for LoRA updates; affects the magnitude of LoRA adaptations.
+
+                * **Type**: int
+                * **Default**: 32
+                * **Required**: True
+
+            **lora_dropout**
+
+            Dropout rate for LoRA layers to prevent overfitting.
+
+                * **Type**: float
+                * **Default**: 0.05
+                * **Required**: False
+
+            **lora_bias**
+
+            Bias type for LoRA. Determines which biases are trainable. Can be 'none', 'all' or 'lora_only'
+
+                * **Type**: str
+                * **Default**: "none"
+                * **Required**: False
+
+            **lora_verbose**
+
+            Enables detailed LoRA-related logging during training.
+
+                * **Type**: bool
+                * **Default**: False
+                * **Required**: False
+
+            **target_modules**
+
+            List of model layers to apply LoRA.
+
+                * **Type**: list[str]
+                * **Default**: ["qkv_proj"] (for Llama)
+                * **Required**: True
+
+
 Download the dataset
 --------------------
 
@@ -148,6 +213,7 @@ by running the following AWS CLI commands on the head node or your Trn1 instance
     mkdir -p ${DATA_DIR} && cd ${DATA_DIR}
     aws s3 cp s3://neuron-s3/training_datasets/llama/sft/training.jsonl .  --no-sign-request
     aws s3 cp s3://neuron-s3/training_datasets/llama/sft/validation.jsonl .  --no-sign-request
+
 
 Then, download the ``config.json`` file:
 
@@ -188,7 +254,7 @@ Modify the following paths in YAML file based on your specific directory configu
 4. ``train_dir`` and ``val_dir``
 
 You can use your custom model, pretrained checkpoint and tokenizer by
-modifying the ``hf_llama3_8B_SFT_config.yaml`` file.
+modifying the ``hf_llama3_8B_SFT_lora_config.yaml`` file.
 
 
 Checkpoint Conversion
@@ -225,7 +291,7 @@ First, clone the open-source ``neuronx-distributed-training`` library
 Now, ensure that you are using the proper config file in the ``conf/`` directory.
 In the ``train.sh`` file, ensure that the ``CONF_FILE`` variable is properly
 set to the config for the model you want to use. In our case,
-it will be ``hf_llama3_8B_SFT_config``. The default config here is a 8B parameter model,
+it will be ``hf_llama3_8B_SFT_lora_config``. The default config here is a 8B parameter model,
 but users can also add their own ``conf/*.yaml`` files and run different configs and
 hyperparameters if desired. Please see :ref:`Config Overview <nxdt_config_overview>`
 for examples and usage for the ``.yaml`` config files.

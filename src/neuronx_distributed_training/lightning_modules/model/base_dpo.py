@@ -75,7 +75,7 @@ class DPOBaseModel(BaseModelModule):
 
         policy_chosen_logps, policy_rejected_logps = torch.split(all_logps, [len_chosen, len(all_logps) - len_chosen])
         reference_chosen_logps, reference_rejected_logps = batch["reference_chosen_logps"], batch["reference_rejected_logps"]
-        kl_beta = config.data.alignment_strategy.dpo.kl_beta
+        kl_beta = config.model_alignment_strategy.dpo.kl_beta
 
         pi_logratios = policy_chosen_logps - policy_rejected_logps
     

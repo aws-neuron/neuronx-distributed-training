@@ -149,7 +149,7 @@ precision:
   xla_downcast_bf16: '0'
   neuron_rt_stochastic_rounding_en: '0'
 
-compiler_flags: '--model-type transformer --distribution-strategy=llm-training'
+compiler_flags: '--model-type transformer'
 compiler_cache_url: /home/ubuntu/neuron_cache
 aync_exec_max_inflight_requests: 5
 bucket_size_collectives: 1024
