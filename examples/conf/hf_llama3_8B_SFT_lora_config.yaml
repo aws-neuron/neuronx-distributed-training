@@ -45,7 +45,7 @@ distributed_strategy:
   tensor_model_parallel_size: 32
   pipeline_model_parallel_size: 1
   virtual_pipeline_model_parallel_size: 1
-  zero1: True
+  zero1: False
   sequence_parallel: True
   kv_replicator: 4
 
@@ -86,7 +86,7 @@ model:
   fusions:
     softmax: True
     flash_attention: True
-  
+
   do_layer_norm_weight_decay: True
 
   optim:
@@ -105,9 +105,22 @@ model:
 model_alignment_strategy:
   sft:
     packing: True # [SFT] used for appending multiple records in a single record until seq length supported by model, if false uses pad tokens till seq length. True increases throughput
-
+  peft:
+      lora_rank: 16 # Rank of LoRA; determines the number of trainable parameters
+      lora_alpha: 32  # Scaling factor for LoRA updates; affects learning rate
+      lora_dropout: 0.05 # Dropout probability for LoRA layers; helps prevent overfitting
+      lora_bias: "none" # Bias type for Lora. Can be 'none', 'all' or 'lora_only'
+      lora_verbose: True # Enables detailed logging of LoRA-related information
+      target_modules: ["qkv_proj"] # Specific layers to apply LoRA
+      # eligible Llama target modules: ["qkv_proj", "o_proj", "gate_up_proj", "down_proj"]
+      load_lora_from_ckpt: False # Will load LoRA adapter and base model from a checkpoint.
+      save_lora_base: True # save the base model
+      merge_lora: False # merge LoRA adapter into the base model for checkpoint
+      save_lora_config_adapter: True # save LoRA configuration and LoRA adapter in the same checkpoint file.
+      merge_sharded_lora: False # merge the sharded LoRA adapter (lora_A, lora_B) checkpoints into a single one
 precision:
-  type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
+  type: 'autocast' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
+  # LoRA requires 'autocast' precision; 'zero1' optimizer is not compatible currently
   # Set the following only if precision type is manual, otherwise they will be automatically set.
   master_weights: False    
   fp32_grad_acc: False

@@ -72,7 +72,6 @@ from neuronx_distributed.kernels.flash_attn import nki_flash_attn_func
 from neuronx_distributed.modules.moe.expert_mlps import ExpertMLPs
 from neuronx_distributed.modules.moe.loss_function import load_balancing_loss_func
 from neuronx_distributed.modules.moe.model import MoE
-from neuronx_distributed.modules.moe.moe_parallel_layers import LinearRouter
 from neuronx_distributed.modules.moe.routing import RouterTopK
 from neuronx_distributed.modules.qkv_linear import GQAQKVColumnParallelLinear
 from neuronx_distributed.parallel_layers import mappings
@@ -85,8 +84,6 @@ from neuronx_distributed.parallel_layers.loss_functions import parallel_cross_en
 from neuronx_distributed.parallel_layers.parallel_state import (
     get_tensor_model_parallel_size,
 )
-from neuronx_distributed.utils.model_utils import move_model_to_device
-
 
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
@@ -260,9 +257,6 @@ class MixtralAttention(MixtralAttentionHF):
             base=self.rope_theta,
         )
 
-        if config.move_model_to_device:
-            move_model_to_device(self, xm.xla_device())
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -274,8 +268,6 @@ class MixtralAttention(MixtralAttentionHF):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         assert use_cache is False, "KV-Cache flow is not fully supported"
         assert past_key_value is None, "KV-Cache flow is not fully supported"
-        if attention_mask is not None:
-            logger.warning("Attention mask is currently not supported in CoreAttention")
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -422,8 +414,6 @@ class LlamaMLP(LlamaMLPHF):
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
-        if config.move_model_to_device:
-            move_model_to_device(self, xm.xla_device())
 
     def forward(self, x):
         if self.pretraining_tp > 1:

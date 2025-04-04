@@ -2,6 +2,11 @@
 
 import hydra
 import os
+from transformers.utils import logging
+import json
+from typing import Union
+
+logger = logging.get_logger(__name__)
 
 def set_env_variable(env_var_name, value, append=False, overwrite=False):
     if append and os.environ.get(env_var_name, None):
@@ -12,6 +17,11 @@ def set_env_variable(env_var_name, value, append=False, overwrite=False):
     elif os.environ.get(env_var_name, None) is None:
         os.environ[env_var_name] = value
 
+def get_dict_from_json(json_file: Union[str, os.PathLike]):
+    with open(json_file, "r", encoding="utf-8") as opened_file:
+        dict_text = json.loads(opened_file.read())
+    return dict_text
+    
 def process_config(cfg):
     """Map default values and set environment variables from config.
 
@@ -47,6 +57,49 @@ def process_config(cfg):
     elif os.environ.get("COMPILE") == "0" and os.environ.get("TRAIN_ITERS") is not None:
         cfg.trainer.max_steps = int(os.environ.get("TRAIN_ITERS"))
 
+	# MOE dropless
+    if "moe" in cfg.model:
+        dropless = cfg.model.moe.get("dropless", False)
+        capacity_factor = cfg.model.moe.capacity_factor
+		# Default to True; glu_mlp is not in config file but initialized as True in model setting
+        glu_mlp = cfg.model.moe.get("glu_mlp", True)
+
+        if cfg.model_source == "hf":
+            model_config = cfg.model.model_config
+            try:
+                config_dict = get_dict_from_json(model_config)
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                raise type(e)(f"Error: {str(e)}: Unable to parse the config file at '{model_config}.")
+
+        if dropless:
+			# Check for LLaMA-like architecture requirements
+            if cfg.model_source == "hf" and config_dict.get("hidden_act", None) != "silu":
+                current_activation = config_dict.get("hidden_act", None)
+                raise ValueError(
+					"Error: Dropless mode is only supported with SiLU activation function. "
+					f"Current activation function: {current_activation}. "
+					"Please adjust your configuration."
+				)
+            elif cfg.model_source == "megatron":
+                activation = getattr(cfg.model, "activation", None)
+                if not (activation == "silu" or activation == "swiglu"):
+                    raise ValueError(
+						"Error: For Megatron models, dropless mode is only supported with SiLU or SwiGLU activation functions. "
+						f"Current activation function: {activation}. "
+						"Please adjust your configuration."
+					)
+            if not glu_mlp:
+                raise ValueError("Error: Dropless mode requires GLU_MLP to be True.")
+            if capacity_factor > 0.0:
+                logger.warning(
+					"Dropless mode works with capacity_factor set to 0.0. "
+					f"Current value: {capacity_factor}. Setting capacity_factor to 0.0."
+				)
+                cfg.model.moe.capacity_factor = 0.0
+        elif not dropless and capacity_factor <= 0.0:
+            raise ValueError(
+				"Error: Dropping requires a capacity factor greater than 0.0 Please adjust your configuration."
+			)
     # precision setting
     if cfg.precision.get("type") == "bf16SR":
         set_env_variable("XLA_USE_BF16", "1")

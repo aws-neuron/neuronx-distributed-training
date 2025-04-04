@@ -35,6 +35,7 @@ from neuronx_distributed_training.lightning_modules.nlp_overrides import (
     NLPTrainer,
 )
 from neuronx_distributed_training.utils.exp_manager import exp_manager
+from neuronx_distributed_training.utils import get_attribute_from_cfg
 
 
 def train(cfg) -> None:
@@ -71,13 +72,13 @@ def train(cfg) -> None:
             )
 
     if cfg.model_source == 'megatron':
-        if getattr(cfg.data, "alignment_strategy", False):
+        if get_attribute_from_cfg(cfg, "model_alignment_strategy", False):
             data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = MegatronDataModule(cfg, trainer)        
         model = MegatronGPTModel(cfg, trainer)
     elif cfg.model_source == 'hf':
-        if getattr(cfg.data, "alignment_strategy", False):
+        if get_attribute_from_cfg(cfg, "model_alignment_strategy", False):
             data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
             data_module = HFDataModule(cfg, trainer)

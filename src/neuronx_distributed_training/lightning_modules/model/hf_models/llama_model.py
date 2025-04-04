@@ -7,7 +7,7 @@ from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 import sys
 from neuronx_distributed.utils.utils import hardware
-from neuronx_distributed_training.utils import get_dtype
+from neuronx_distributed_training.utils import get_dtype, get_attribute_from_cfg
 from torch_neuronx.utils import get_platform_target
 from neuronx_distributed_training.models.hf_models.modeling_llama import (
     CoreAttention,
@@ -43,6 +43,22 @@ class HFLLamaModule(BaseHfModel):
             config.hidden_size = self.config.model.get('hidden_size')
         if self.config.model.get('rope_theta', -1) != -1:
             config.rope_theta = self.config.model.get('rope_theta')
+
+        if get_attribute_from_cfg(self.config, "peft", False):
+            lora_config = nxd.modules.lora.LoraConfig(
+                lora_rank=get_attribute_from_cfg(self.config, 'lora_rank', 16),
+                lora_alpha=get_attribute_from_cfg(self.config, 'lora_alpha', 32),
+                lora_dropout=get_attribute_from_cfg(self.config, 'lora_dropout', 0.05),
+                bias=get_attribute_from_cfg(self.config, 'lora_bias', "none"),
+                lora_verbose=get_attribute_from_cfg(self.config, 'lora_verbose', True),
+                target_modules=get_attribute_from_cfg(self.config, 'target_modules', ["qkv_proj"]),
+                load_lora_from_ckpt=get_attribute_from_cfg(self.config, 'load_lora_from_ckpt', False),
+                save_lora_base=get_attribute_from_cfg(self.config, 'save_lora_base', False),
+                merge_lora=get_attribute_from_cfg(self.config, 'merge_lora', False),
+                save_lora_config_adapter=get_attribute_from_cfg(self.config, 'save_lora_config_adapter', True),
+                merge_sharded_lora=get_attribute_from_cfg(self.config, 'merge_sharded_lora', False),
+            )
+            self.nxd_config["lora_config"] = lora_config
 
         if self.config.precision.type == "fp32":
             config.reduce_dtype = get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'fp32')) # RS would be in fp32 as there is no implicit downcasting

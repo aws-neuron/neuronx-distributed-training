@@ -8,7 +8,7 @@ from neuronx_distributed.parallel_layers.layers import (
 )
 
 from neuronx_distributed_training.utils.model_utils import get_param_groups_by_weight_decay
-
+from neuronx_distributed_training.utils import get_attribute_from_cfg
 from ..base import BaseModelModule
 from ..base_dpo import DPOBaseModel
 from omegaconf import DictConfig, open_dict
@@ -17,14 +17,14 @@ from pytorch_lightning.trainer.trainer import Trainer
 
 class BaseHfModel(BaseModelModule):
     def on_train_start(self):
-        if 'dpo' in getattr(self.config.data, 'alignment_strategy', {}):
+        if get_attribute_from_cfg(self.config, "dpo", False):
             self.dpo_module = DPOBaseModel(self.config, self.trainer, self.model)
             self.dpo_module.on_train_start(self.trainer, self.model, self.config)
         else:
             super().on_train_start()
 
     def model_fwd_calc_loss(self, batch):
-        if 'dpo' in getattr(self.config.data, 'alignment_strategy', {}):
+        if get_attribute_from_cfg(self.config, "dpo", False):
             return self.dpo_module.model_fwd_calc_loss(self.model, batch, self.config)
         else:
             return super().model_fwd_calc_loss(batch)

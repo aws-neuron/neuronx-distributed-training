@@ -105,7 +105,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 from torchmetrics import Metric
-from neuronx_distributed_training.utils import get_lnc_size
+from neuronx_distributed_training.utils import get_lnc_size, get_attribute_from_cfg
 
 
 def has_len_all_ranks_patched(
@@ -117,7 +117,7 @@ def has_len_all_ranks_patched(
     infinite dataloader."""
     try:
         local_length = len(dataloader)  # type: ignore [arg-type] # we are checking with duck-typing
-        total_length = strategy.reduce(torch.tensor(local_length, device=strategy.root_device), reduce_op="sum")
+        total_length, = strategy.reduce(torch.tensor([local_length], device=strategy.root_device), reduce_op="sum")
 
         if total_length == 0:
             rank_zero_warn(
@@ -302,6 +302,11 @@ class NLPFitLoop(FitLoop):
 
 
 class NLPCheckpointIO(XLACheckpointIO):
+    """
+    This class overrides PTL's XLACheckpointIO in order to use NxD's
+    checkpoint APIs. For more information on XLAChekpointIO please see:
+    https://lightning.ai/docs/pytorch/1.8.6/api/pytorch_lightning.plugins.io.XLACheckpointIO.html
+    """
     def __init__(self, async_save=False, weight_init_only=False):
         super().__init__()
         self._async_save = async_save
@@ -934,6 +939,9 @@ class NLPTrainer(Trainer):
 class NLPDDPStrategy(TPUSpawnStrategy):
     """DDP plugin for Pytorch Lightning. Needed to customize DDP for model parallel models.
 
+    This class overrides certain API's from TPUSpawnStrategy for NxDT. For more info on 
+    TPUSpawnStrategy, please see: https://lightning.ai/docs/pytorch/1.8.6/api/pytorch_lightning.strategies.TPUSpawnStrategy
+
     Args:
         no_ddp_communication_hook: Disable DDP communication hook when using AMP-O2
         with FP32 gradient accumulation.
@@ -1035,7 +1043,7 @@ class NLPDDPStrategy(TPUSpawnStrategy):
         ]
 
         # Print out the real missing keys and throw an exception if there are any
-        if real_missing_keys:
+        if real_missing_keys and not get_attribute_from_cfg(self.lightning_module.config, "peft", False):
             logging.error(f"Error: Missing keys when loading state dictionary: {', '.join(real_missing_keys)}")
             raise RuntimeError(f"Missing keys when loading state dictionary: {', '.join(real_missing_keys)}")
 

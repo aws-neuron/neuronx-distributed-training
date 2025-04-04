@@ -109,7 +109,7 @@ precision:
   parallel_layers_reduce_dtype: 'bf16'
 
 # fix: hardcoded trn2 compiler flags to this config, will remove after compiler updates
-compiler_flags: '--model-type transformer --distribution-strategy=llm-training'
+compiler_flags: '--model-type transformer'
 compiler_cache_url: /home/ubuntu/neuron-cache
 aync_exec_max_inflight_requests: 5
 bucket_size_collectives: 1024

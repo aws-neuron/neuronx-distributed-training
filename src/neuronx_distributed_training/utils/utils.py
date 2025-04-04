@@ -7,6 +7,7 @@ from neuronx_distributed.utils.utils import hardware
 from torch_neuronx.utils import get_platform_target
 import torch
 from typing import Dict, Any
+from omegaconf import OmegaConf, DictConfig, ListConfig
 
 
 # Mapping of string representations to PyTorch data types
@@ -55,3 +56,75 @@ class Throughput:
         throughput = window_size * self.seqs_per_iteration / self.window_time
         self.throughputs.append(throughput)
         return throughput
+
+def get_attribute_from_cfg(cfg: Any, attr_path: str, default: Any) -> Any:
+    """
+    Retrieve an attribute from a nested configuration structure.
+
+    This function searches for an attribute in a nested configuration,
+    first by trying the exact path, then by searching everywhere if not found.
+
+    Args:
+        cfg (Any): The configuration object to search in.
+        attr_path (str): The attribute path to search for, using dot notation.
+        default (Any): The default value to return if the attribute is not found.
+
+    Returns:
+        Any: The found attribute value, or the default if not found.
+    """
+    def search(obj, keys, everywhere=False):
+        if not keys:
+            return obj
+
+        if OmegaConf.is_config(obj):
+            if isinstance(obj, DictConfig):
+                if everywhere:
+                    for key, value in obj.items():
+                        if key == keys[-1]:
+                            return value
+                        result = search(value, keys, everywhere)
+                        if result is not None:
+                            return result
+                elif keys[0] in obj:
+                    return search(obj[keys[0]], keys[1:], everywhere)
+            elif isinstance(obj, ListConfig):
+                if everywhere:
+                    for item in obj:
+                        result = search(item, keys, everywhere)
+                        if result is not None:
+                            return result
+                else:
+                    try:
+                        index = int(keys[0])
+                        if 0 <= index < len(obj):
+                            return search(obj[index], keys[1:], everywhere)
+                    except ValueError:
+                        pass
+        elif isinstance(obj, dict):
+            if everywhere:
+                for key, value in obj.items():
+                    if key == keys[-1]:
+                        return value
+                    result = search(value, keys, everywhere)
+                    if result is not None:
+                        return result
+            elif keys[0] in obj:
+                return search(obj[keys[0]], keys[1:], everywhere)
+        elif isinstance(obj, (list, tuple)):
+            if everywhere:
+                for item in obj:
+                    result = search(item, keys, everywhere)
+                    if result is not None:
+                        return result
+            else:
+                try:
+                    index = int(keys[0])
+                    if 0 <= index < len(obj):
+                        return search(obj[index], keys[1:], everywhere)
+                except ValueError:
+                    pass
+        return None
+
+    keys = attr_path.split('.')
+    result = search(cfg, keys) or search(cfg, keys, everywhere=True)
+    return result if result is not None else default

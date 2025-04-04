@@ -1,4 +1,4 @@
-name: hf_mixtral
+name: hf_mixtral_dropless
 model_source: hf
 seed: 1234
 
@@ -20,7 +20,7 @@ exp_manager:
   create_tensorboard_logger: True
   explicit_log_dir: null
   exp_dir: null
-  name: hf_mixtral
+  name: hf_mixtral_dropless
   resume_if_exists: True
   resume_ignore_no_checkpoint: True
   create_checkpoint_callback: True
@@ -69,13 +69,13 @@ model:
     num_experts: 8 # of ExpertMLPs (explained in background)
     frequency: 1 # how frequent each layer is MoE i.e. 1 = every layer MoE 
     dropout: 0.0 # dropout for MoE Layer
-    capacity_factor: 2.0
+    capacity_factor: 0.0
     # dropless flag: 
     #   True: Uses the blockwise NKI kernel inspired by Megablocks
     #   False: 
     #     - If capacity_factor is None: Uses all_experts()
     #     - Otherwise: Runs forward_capacity_factor()
-    dropless: False
+    dropless: True
     routing_algorithm: top_k # or top_k - sinkhorn must have top_k=1 only topk is currently implemented
     top_k: 2 # number of top k routing
     output_router_logits: True
@@ -115,7 +115,7 @@ precision:
   neuron_rt_stochastic_rounding_en: '0'
 
 compiler_flags: '--model-type transformer --enable-saturate-infinity'
-compiler_cache_url: /home/ubuntu/neuron_cache
+compiler_cache_url: neuron_cache_hf_moe
 aync_exec_max_inflight_requests: 7
 bucket_size_collectives: 1024
 neuron_rt_exec_timeout: 100

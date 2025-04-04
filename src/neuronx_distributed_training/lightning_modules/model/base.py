@@ -663,6 +663,8 @@ class BaseModelModule(NLPModel):
                 module.bias.data.zero_()
         elif isinstance(module, GQAQKVColumnParallelLinear):
             module.initialize_weight_biases()
+        elif isinstance(module, torch.nn.Linear):
+            module.reset_parameters()
         elif len(module._parameters):
             # If there is no init provided for any of the module, we want to raise
             # an exception to alert the user that there might be some weights that 
