@@ -4,9 +4,9 @@
 1. Clone apex repo
 
 ```
-git clone https://github.com/ericharper/apex.git
+git clone https://github.com/NVIDIA/apex.git
 cd apex
-git checkout nm_v1.14.0
+git checkout 23.05
 ```
 
 2. Replace the contents of the setup.py with the following contents:
@@ -57,21 +57,11 @@ pip install -r requirements.txt apex/dist/apex-0.1-py3-none-any.whl
 pip install neuronx_distributed --extra-index-url https://pip.repos.neuron.amazonaws.com
 ```
 
-#### Build and Install NeuronxDistributedTraining (NxDT)
-
-Let's build the NxDT wheel using the following commands:
+#### Install NeuronxDistributedTraining (NxDT)
 
 ```
-./build.sh
+pip install neuronx_distributed_training --extra-index-url https://pip.repos.neuron.amazonaws.com
 ```
-
-This should produce a wheel inside the `build` directory. You can install that wheel using the command:
-
-```
-pip install build/neuronx_distributed_training-0.1-py3-none-any.whl
-```
-
-
 
 ## How to run.
 
