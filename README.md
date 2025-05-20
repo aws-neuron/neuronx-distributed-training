@@ -57,6 +57,12 @@ pip install -r requirements.txt apex/dist/apex-0.1-py3-none-any.whl
 pip install neuronx_distributed --extra-index-url https://pip.repos.neuron.amazonaws.com
 ```
 
+After installing the requirements, we need to patch some of the installations so run
+
+```
+./install_setup.sh
+```
+
 #### Install NeuronxDistributedTraining (NxDT)
 
 ```

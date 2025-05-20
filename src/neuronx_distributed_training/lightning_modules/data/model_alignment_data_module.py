@@ -130,6 +130,7 @@ class ModelAlignmentDataModule(BaseDataModule):
         """
         algorithm_dispatchers = {
             "dpo": self._tokenize_and_modify_multiple_responses,
+            "orpo": self._tokenize_and_modify_multiple_responses,
             "sft": self._tokenize_and_modify_for_SFT,
         }
 
@@ -164,7 +165,7 @@ class ModelAlignmentDataModule(BaseDataModule):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = trl.DPOConfig(
                 output_dir=temp_dir,
-                max_prompt_length=get_attribute_from_cfg(self.config, "max_dpo_prompt_length", 2048),
+                max_prompt_length=get_attribute_from_cfg(self.config, "max_prompt_length", 2048),
                 max_length=get_attribute_from_cfg(self.config, "seq_length", 4096),
                 truncation_mode=get_attribute_from_cfg(self.config, "dpo.truncation_mode", "keep_start")
             )
@@ -198,7 +199,7 @@ class ModelAlignmentDataModule(BaseDataModule):
                 data = ConcatDataset(data, self.tokenizer.eos_token_id, pad_id_map, self.config.data.seq_length) # packs dataset and returns new dataset
             else:
                 data = PaddedDataset(data, pad_id_map, self.config.data.seq_length) # collator pads for batch length same, but we want all batches to be of same length, so choosing max seq as default
-        elif hasattr(self.config.model_alignment_strategy, 'dpo'):
+        elif hasattr(self.config.model_alignment_strategy, 'dpo') or hasattr(self.config.model_alignment_strategy, 'orpo'):
             data = PaddedDPODataset(data, self.config.data.seq_length)
             # collator is changed to handle keys in DPO input batch {chosen_input_ids, rejected_input_ids, etc}, not handled with transformers seq2seq collator  
             _ensure_trl()

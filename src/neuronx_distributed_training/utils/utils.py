@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import queue
 import time
 from neuronx_distributed.utils.utils import hardware
@@ -17,6 +18,17 @@ DTYPE_MAP = {
     'bf16': torch.bfloat16,
 }
 
+def _distributed_available():
+    from lightning.fabric.accelerators.xla import XLAAccelerator
+    import torch_xla.runtime as xr
+
+    xla_available = xr.world_size() > 1 and XLAAccelerator.is_available()
+    return (
+        xla_available or
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+    )
+
 def get_lnc_size(lnc):
     hardware_type = hardware(get_platform_target())
     if hardware_type == hardware.TRN2:
@@ -29,6 +41,13 @@ def get_lnc_size(lnc):
 def get_dtype(dtype_str: str) -> torch.dtype:
     """Convert string representation to PyTorch dtype."""
     return DTYPE_MAP.get(dtype_str.lower(), torch.bfloat16)
+
+def get_cast_dtype() -> torch.dtype:
+    """Returns the datatype to be used for casting depending on environment variables"""
+
+    if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
+        return torch.float64
+    return torch.float32
 
 class Throughput:
     def __init__(self, moving_avg_window_size):

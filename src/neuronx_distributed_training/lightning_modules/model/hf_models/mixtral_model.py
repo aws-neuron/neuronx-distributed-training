@@ -10,6 +10,7 @@ from neuronx_distributed_training.models.hf_models.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralForCausalLM,
     MixtralRMSNorm,
+    MixtralRotaryEmbedding,
     LlamaMLP
 )
 from neuronx_distributed.modules.qkv_linear import GQAQKVColumnParallelLinear
@@ -18,7 +19,6 @@ from neuronx_distributed.parallel_layers.layers import (
     ParallelEmbedding,
     RowParallelLinear,
 )
-
 from .base_model import BaseHfModel
 
 class HFMixtralModule(BaseHfModel):
@@ -46,7 +46,7 @@ class HFMixtralModule(BaseHfModel):
         config.router_aux_loss_coef = self.config.model.moe.get('router_aux_loss_coef', 0.02)
         config.normalize_top_k_affinities = self.config.model.moe.get('normalize_top_k_affinities', True)
 
-        leaf_module_cls = [MixtralRMSNorm.__name__]
+        leaf_module_cls = [MixtralRMSNorm.__name__, MixtralRotaryEmbedding.__name__]
         activation_recompute_modules = []
         recompute_modules = self.config.model.get("activations_checkpoint_recompute", [])
         granularity = self.config.model.get("activations_checkpoint_granularity", None)
@@ -92,3 +92,5 @@ class HFMixtralModule(BaseHfModel):
                 module.bias.data.zero_()
         elif isinstance(module, GQAQKVColumnParallelLinear):
             module.initialize_weight_biases()
+        else:
+            super().init_weights(module, device)

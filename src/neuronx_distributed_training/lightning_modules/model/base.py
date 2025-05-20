@@ -26,11 +26,13 @@ from neuronx_distributed.parallel_layers.utils import (
     param_is_not_tensor_parallel_duplicate,
 )
 from neuronx_distributed.modules.moe.loss_function import load_balancing_loss_func
+from neuronx_distributed.utils.batch_utils import get_batch_on_this_context_parallel_rank
 from omegaconf import DictConfig
 from pytorch_lightning.trainer.connectors.logger_connector.fx_validator import (
     _FxValidator,
 )
-from lightning_lite.utilities.distributed import _distributed_available, _sync_ddp
+from lightning.fabric.utilities.distributed import _sync_ddp
+from neuronx_distributed_training.utils import _distributed_available
 from pytorch_lightning.utilities.exceptions import MisconfigurationException
 from pytorch_lightning.utilities.rank_zero import rank_zero_warn
 from pytorch_lightning.utilities.signature_utils import is_param_in_hook_signature
@@ -39,9 +41,9 @@ from torchmetrics import Metric
 
 from neuronx_distributed_training.models.megatron.module import param_is_not_shared
 from neuronx_distributed_training.utils import Throughput
+from neuronx_distributed_training.utils import get_attribute_from_cfg
 
 from .megatron_init import initialize_model_parallel_for_nemo
-
 
 class BaseModelModule(NLPModel):
     def __init__(self, cfg, trainer, no_lm_init=True):
@@ -49,7 +51,7 @@ class BaseModelModule(NLPModel):
         self.config = cfg
         self.trainer = trainer
         dp_size = xm.xrt_world_size() / (
-            self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size")
+            self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size") * get_attribute_from_cfg(self.config, "context_parallel_size", 1)
         )
         self.num_microbatches = int(self.config.data.global_batch_size / (self.config.data.micro_batch_size * dp_size))
 
@@ -81,6 +83,7 @@ class BaseModelModule(NLPModel):
             pipeline_model_parallel_size=self.config.distributed_strategy.get("pipeline_model_parallel_size", 1),
             virtual_pipeline_model_parallel_size=self.config.distributed_strategy.get("virtual_pipeline_model_parallel_size", 1),
             pipeline_model_parallel_split_rank=self.config.distributed_strategy.get("pipeline_model_parallel_split_rank", 0),
+            context_parallel_size=get_attribute_from_cfg(self.config, "context_parallel_size", 1),
             micro_batch_size=self.config.data.get("micro_batch_size"),
             global_batch_size=self.config.data.get("global_batch_size"),
             seed=cfg.get("seed", None),
@@ -117,21 +120,23 @@ class BaseModelModule(NLPModel):
             use_master_weights = self.config.precision.get("master_weights", False)
             use_fp32_grad_acc = self.config.precision.get("fp32_grad_acc", False)
         else:
-            use_master_weights = precision_type == "mixed_precision" or precision_type == "mixed_precisionSR"
-            use_fp32_grad_acc = precision_type == "mixed_precision" or precision_type == "mixed_precisionSR"
-            
+            use_master_weights = precision_type == "mixed_precision" or precision_type == "mixed_precisionSR" or precision_type == "autocast"
+            use_fp32_grad_acc = precision_type == "mixed_precision" or precision_type == "mixed_precisionSR" or precision_type == "autocast"
+        
+        zero_one_enabled = self.config.distributed_strategy.get("zero1", True)
         mixed_precision_config = {
-            "use_master_weights": use_master_weights,
-            "use_fp32_grad_acc": use_fp32_grad_acc,
-            "use_master_weights_in_ckpt": self.config.exp_manager.checkpoint_callback_params.get("use_master_weights_in_ckpt", False),
+            "use_master_weights": use_master_weights and zero_one_enabled,
+            "use_fp32_grad_acc": use_fp32_grad_acc and zero_one_enabled,
+            "use_master_weights_in_ckpt": self.config.exp_manager.checkpoint_callback_params.get("use_master_weights_in_ckpt", False) and zero_one_enabled,
         }
 
         self.nxd_config = nxd.neuronx_distributed_config(
             tensor_parallel_size=self.config.distributed_strategy.get("tensor_model_parallel_size", 1),
             pipeline_parallel_size=self.config.distributed_strategy.get("pipeline_model_parallel_size", 1),
             expert_parallel_size=self.config.distributed_strategy.get("expert_model_parallel_size", 1),
+            context_parallel_size=get_attribute_from_cfg(self.config, "context_parallel_size", 1),
             optimizer_config={
-                "zero_one_enabled": self.config.distributed_strategy.get("zero1", True),
+                "zero_one_enabled": zero_one_enabled,
                 "grad_clipping": self.trainer.gradient_clip_val is not None,
                 "max_grad_norm": self.trainer.gradient_clip_val,
             },
@@ -184,9 +189,12 @@ class BaseModelModule(NLPModel):
 
         # we zero grads here because we also call backward in the apex fwd/bwd functions
         self._optimizer.zero_grad()
+        
+        # Split batch if CP is enabled
+        batch = get_batch_on_this_context_parallel_rank(batch)
 
         with torch.autocast(enabled=self.config.precision.get("type") == "autocast", dtype=torch.bfloat16, device_type="cuda"):
-            loss_mean = self.forward_backward_step(batch, is_training=True)
+            loss_mean, misc_metrics = self.forward_backward_step(batch, is_training=True)
 
         with torch.no_grad():
             full_log = 0 == self.global_step % self.trainer.log_every_n_steps  # dump at least a partial log
@@ -224,6 +232,7 @@ class BaseModelModule(NLPModel):
                 (
                     self.log,
                     loss_mean,
+                    misc_metrics,
                     lr,
                     float(self.trainer.global_step),
                     float(consumed_samples),
@@ -236,7 +245,8 @@ class BaseModelModule(NLPModel):
             )
         xm.mark_step()
 
-        return None
+        # update for new PTL
+        return loss_mean
 
     def on_train_batch_end(self, outputs, batch, batch_idx: int, unused: Optional[int] = 0) -> None:
         super().on_train_batch_end(outputs, batch, batch_idx)
@@ -250,11 +260,15 @@ class BaseModelModule(NLPModel):
         a number of microbatches depending on the global batch size and model parallel size
         from the dataloader to produce a list of microbatches.
         """
-        return self.forward_backward_step(batch), self.get_batch_length(batch)
+        outputs, length = self.forward_backward_step(batch), self.get_batch_length(batch)
+        self.validation_step_outputs.append((outputs, length))
+        return outputs, length
 
-    def validation_epoch_end(self, outputs):
+    # update
+    def on_validation_epoch_end(self):
         # We want to take the average of all the losses reported in the validation epoch
-        losses_across_val_epoch = [x[0] for x in outputs]
+        # outputs is a list of nested tuples containing (loss, misc_metrics)
+        losses_across_val_epoch = [x[0][0][0] for x in self.validation_step_outputs]
         averaged_loss_val_epoch = sum(losses_across_val_epoch) / len(losses_across_val_epoch)
         # we can only log on one rank if it is rank zero so we all_reduce from last rank
         # (effectively a broadcast since we are all_reducing with a zero tensor)
@@ -292,7 +306,7 @@ class BaseModelModule(NLPModel):
             sched_config = dict(self.config.model.optim.sched)
             sched_config["max_steps"] = self._trainer.max_steps
             self._scheduler = prepare_lr_scheduler(
-                optimizer=self._optimizer, scheduler_config=sched_config, train_dataloader=self._train_dl
+                optimizer=self._optimizer, scheduler_config=sched_config, train_dataloader=self.trainer.datamodule.train_dataloader()
             )
         if self._scheduler is None:
             return self._optimizer
@@ -332,17 +346,18 @@ class BaseModelModule(NLPModel):
 
     def model_fwd_calc_loss(self, batch):
         output = self.model(**batch)
-        return output[0]
+        return output[0], None
 
     def forward_backward_step(self, batch, is_training=False):
         # TODO: Needs override
         device = xm.xla_device()
-        running_loss = torch.zeros(1, device=device)
+        misc_metrics = None
+        running_loss = torch.zeros(1, device=device, dtype=torch.bfloat16)
         if parallel_state.get_pipeline_model_parallel_size() == 1:
             batch_for_pipeline = self.get_batch_iterator(self.process_global_batch(batch))
             total_batches = len(batch_for_pipeline)
             for batch in batch_for_pipeline:
-                loss = self.model_fwd_calc_loss(batch)
+                loss, misc_metrics = self.model_fwd_calc_loss(batch)
                 
                 # Want to run the loss in fp32 so that the division and sum are not affect by dp degree
                 if os.environ.get("XLA_DOWNCAST_BF16", None) == "1":
@@ -364,9 +379,15 @@ class BaseModelModule(NLPModel):
         # it can cause mismatch in HLOs. To avoid this, we just typecast the loss to float64
         running_loss = running_loss.to(torch.float64)
         xm.mark_step()
+        self.reduce_loss_from_context_parallel_group(running_loss)
         torch.distributed.all_reduce(running_loss, group=parallel_state.get_data_parallel_group())
         loss_mean = running_loss / torch.distributed.get_world_size(group=parallel_state.get_data_parallel_group())
-        return loss_mean
+        return loss_mean, misc_metrics
+    
+    def reduce_loss_from_context_parallel_group(self, running_loss):
+        if parallel_state.get_context_model_parallel_size() > 1:
+            torch.distributed.all_reduce(running_loss, group=parallel_state.get_context_model_parallel_group())
+            running_loss /= parallel_state.get_context_model_parallel_size()
 
     def calculate_parameter_norm(self, parameters, norm_type=2):
         """Calculate parameter norms across model parallel ranks
@@ -402,6 +423,9 @@ class BaseModelModule(NLPModel):
                 total_norm, op=torch.distributed.ReduceOp.MAX, group=parallel_state.get_tensor_model_parallel_group()
             )
             torch.distributed.all_reduce(
+                total_norm, op=torch.distributed.ReduceOp.MAX, group=parallel_state.get_context_model_parallel_group()
+            )
+            torch.distributed.all_reduce(
                 total_norm, op=torch.distributed.ReduceOp.MAX, group=parallel_state.get_pipeline_model_parallel_group()
             )
             total_norm = total_norm[0]
@@ -412,6 +436,9 @@ class BaseModelModule(NLPModel):
             # Sum across all model-parallel TPUs.
             torch.distributed.all_reduce(
                 total_norm, op=torch.distributed.ReduceOp.SUM, group=parallel_state.get_tensor_model_parallel_group()
+            )
+            torch.distributed.all_reduce(
+                total_norm, op=torch.distributed.ReduceOp.SUM, group=parallel_state.get_context_model_parallel_group()
             )
             torch.distributed.all_reduce(
                 total_norm, op=torch.distributed.ReduceOp.SUM, group=parallel_state.get_pipeline_model_parallel_group()
@@ -593,6 +620,7 @@ class BaseModelModule(NLPModel):
         self,
         log_fn,
         loss_mean,
+        misc_metrics,
         lr,
         global_step,
         consumed_samples,
@@ -603,8 +631,13 @@ class BaseModelModule(NLPModel):
         trainer,
     ):
         loss_cpu = loss_mean.detach().cpu()
-        trainer.fit_loop.epoch_loop.batch_loop.running_loss.append(loss_cpu)
+        # trainer.fit_loop.epoch_loop.batch_loop.running_loss.append(loss_cpu)
         log_fn("reduced_train_loss", loss_cpu, prog_bar=True, rank_zero_only=True)
+        if misc_metrics is not None:
+            for key, value in misc_metrics.items():
+                if isinstance(value, torch.Tensor):
+                    value = value.detach().cpu()
+                log_fn(key, value, prog_bar=True, rank_zero_only=True)
         log_fn("lr", lr, prog_bar=True, rank_zero_only=True)
         if param_norm:
             log_fn("parameter_norm", param_norm.detach().cpu(), prog_bar=True, rank_zero_only=True)
@@ -640,7 +673,7 @@ class BaseModelModule(NLPModel):
         return self.model.state_dict(*args, **kwargs)
 
     def train_dataloader(self):
-        return self.trainer.datamodule._train_dl
+        return self.trainer.datamodule.train_dataloader()
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)

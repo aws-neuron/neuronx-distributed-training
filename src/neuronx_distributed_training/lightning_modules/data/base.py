@@ -6,7 +6,8 @@ from typing import Any
 
 import torch
 import torch_xla.core.xla_model as xm
-from pytorch_lightning.core.datamodule import LightningDataModule
+from neuronx_distributed_training.utils import get_attribute_from_cfg
+from lightning.pytorch.core.datamodule import LightningDataModule
 import logging
 
 class BaseDataModule(LightningDataModule):
@@ -15,7 +16,7 @@ class BaseDataModule(LightningDataModule):
         self.config = cfg
         self.trainer = trainer
         self.dp_size = xm.xrt_world_size() / (
-            self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size")
+            self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size") * get_attribute_from_cfg(self.config, "context_parallel_size", 1)
         )
         self.num_microbatches = int(
             self.config.data.global_batch_size / (self.config.data.micro_batch_size * self.dp_size)
@@ -23,7 +24,7 @@ class BaseDataModule(LightningDataModule):
 
     def setup(self, stage=None):
         super().setup(stage)
-        resume_checkpoint_path = self.trainer._checkpoint_connector.resume_from_checkpoint_fit_path
+        resume_checkpoint_path = self.trainer.ckpt_path
         self.init_consumed_samples = (
             self._extract_consumed_samples_from_ckpt(resume_checkpoint_path) if resume_checkpoint_path else 0
         )

@@ -3,7 +3,7 @@
 
 import sys
 import types
-
+from typing import List
 import torch
 
 if torch.__version__.startswith("2"):

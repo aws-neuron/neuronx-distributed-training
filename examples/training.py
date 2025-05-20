@@ -15,7 +15,7 @@ import datetime
 import os
 
 import torch
-from lightning_lite.plugins.environments import TorchElasticEnvironment
+from lightning.pytorch.plugins.environments import TorchElasticEnvironment
 from nemo.utils import logging
 from nemo.utils.exp_manager import StatelessTimer
 from omegaconf.omegaconf import OmegaConf, open_dict
@@ -43,7 +43,11 @@ def train(cfg) -> None:
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     plugins = []
 
-    nlp_xla_checkpoint_io = NLPCheckpointIO(cfg.exp_manager.get("async_checkpointing", False), cfg.model.get("weight_init_only",False))
+    nlp_xla_checkpoint_io = NLPCheckpointIO(
+        async_save=cfg.exp_manager.get("async_checkpointing", False),
+        weight_init_only=cfg.model.get("weight_init_only",False),
+        ptl_version=cfg.exp_manager.get("ckpt_ptl_version", "2.5.0"),
+    )
     cluster_environment = None
     if os.environ.get("TORCHELASTIC_RUN_ID") is not None:
         cluster_environment = TorchElasticEnvironment()
@@ -54,14 +58,7 @@ def train(cfg) -> None:
         restore_path=cfg.exp_manager.resume_from_checkpoint,
     )
 
-    # update resume from checkpoint found by exp_manager
-    if cfg.exp_manager.resume_from_checkpoint is not None:
-        resume_from_checkpoint = cfg.exp_manager.resume_from_checkpoint
-        trainer = NLPTrainer(
-            plugins=plugins, strategy=strategy, resume_from_checkpoint=resume_from_checkpoint, **cfg.trainer
-        )
-    else:
-        trainer = NLPTrainer(plugins=plugins, strategy=strategy, **cfg.trainer)
+    trainer = NLPTrainer(plugins=plugins, strategy=strategy, **cfg.trainer)
 
     exp_manager(trainer, cfg.exp_manager)
     
@@ -75,7 +72,7 @@ def train(cfg) -> None:
         if get_attribute_from_cfg(cfg, "model_alignment_strategy", False):
             data_module = ModelAlignmentDataModule(cfg, trainer)
         else:
-            data_module = MegatronDataModule(cfg, trainer)        
+            data_module = MegatronDataModule(cfg, trainer)     
         model = MegatronGPTModel(cfg, trainer)
     elif cfg.model_source == 'hf':
         if get_attribute_from_cfg(cfg, "model_alignment_strategy", False):
@@ -91,7 +88,7 @@ def train(cfg) -> None:
                 raise ModuleNotFoundError("HF transformers package is not the correct version, must be at least 4.36.0.") from e
             model = HFMixtralModule(cfg, trainer)
         else:
-            model = HFLLamaModule(cfg, trainer) 
+            model = HFLLamaModule(cfg, trainer)
     else:
         raise NotImplementedError
-    trainer.fit(model, datamodule=data_module)
+    trainer.fit(model, datamodule=data_module, ckpt_path=cfg.exp_manager.resume_from_checkpoint)

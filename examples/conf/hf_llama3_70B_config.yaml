@@ -32,6 +32,7 @@ exp_manager:
     filename: 'hf_llama3_70B--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
     every_n_train_steps: 10
+    use_master_weights_in_ckpt: False
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
   log_gradient_norm: True # Logs gradient norm across model parallel ranks
   enable_recovery_time_instrumentation: False # default to not printing the detailing timing for recovery
@@ -45,6 +46,7 @@ distributed_strategy:
   tensor_model_parallel_size: 32
   pipeline_model_parallel_size: 8
   virtual_pipeline_model_parallel_size: 1
+  context_parallel_size: 1
   zero1: True
   sequence_parallel: True
   kv_replicator: 4

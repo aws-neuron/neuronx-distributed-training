@@ -47,7 +47,7 @@ from neuronx_distributed.parallel_layers.layers import (
     RowParallelLinear,
 )
 from omegaconf.dictconfig import DictConfig
-from pytorch_lightning.trainer.trainer import Trainer
+from lightning.pytorch.trainer.trainer import Trainer
 
 from neuronx_distributed.modules.rms_norm import RMSNorm
 from neuronx_distributed_training.models.megatron.gpt_model import GPTModel
@@ -157,12 +157,16 @@ class MegatronGPTModel(MegatronBaseModel):
         self.tokenizer = None
         super().__init__(cfg, trainer=trainer, no_lm_init=True)
 
-        if self.trainer.precision != 32:
+        # update precision input changes
+        if isinstance(self.trainer.precision, str) and "32" not in self.trainer.precision:
+            raise ValueError("precision must be in 32")
+        elif isinstance(self.trainer.precision, int) and self.trainer.precision != 32:
             raise ValueError("precision must be in 32")
 
     def build_model(self):
+        resuming_from_checkpoint = True if self.trainer.ckpt_path else False
         self.model_module = ModelModule(
-            self.config, self.trainer.datamodule.padded_vocab_size, self.trainer.is_resuming_from_checkpoint()
+            self.config, self.trainer.datamodule.padded_vocab_size, resuming_from_checkpoint
         )
         return self.model_module.build_model(self.nxd_config)
 
@@ -197,6 +201,7 @@ class MegatronGPTModel(MegatronBaseModel):
     def forward_backward_step(self, batch, is_training=False):
         device = xm.xla_device()
         running_loss = torch.zeros(1, device=device)
+        misc_metrics = None
         if parallel_state.get_pipeline_model_parallel_size() == 1:
             batch_for_pipeline = self.get_batch_iterator(self.trainer.datamodule.process_global_batch(batch))
             total_batches = len(batch_for_pipeline)
@@ -234,7 +239,7 @@ class MegatronGPTModel(MegatronBaseModel):
         xm.mark_step()
         torch.distributed.all_reduce(running_loss, group=parallel_state.get_data_parallel_group())
         loss_mean = running_loss / torch.distributed.get_world_size(group=parallel_state.get_data_parallel_group())
-        return loss_mean
+        return loss_mean, misc_metrics
 
     def init_weights(self, module, device):
         """

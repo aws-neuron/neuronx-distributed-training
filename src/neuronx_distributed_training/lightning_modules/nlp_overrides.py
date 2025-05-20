@@ -16,6 +16,7 @@ import itertools
 import os
 import shutil
 import tempfile
+from collections import defaultdict
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -32,18 +33,16 @@ from typing import (
 )
 
 import neuronx_distributed as nxd
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import torch.multiprocessing as mp
 import torch_xla.core.xla_model as xm
-from lightning_lite.plugins import ClusterEnvironment, XLACheckpointIO
-from lightning_lite.plugins.environments import XLAEnvironment
-from lightning_lite.strategies.launchers.xla import _rank_teardown
-from lightning_lite.utilities.data import _auto_add_worker_init_fn
-from lightning_lite.utilities.data import (
-    has_iterable_dataset as new_has_iterable_dataset,
-)
-from lightning_lite.utilities.types import _PATH, Optimizable
+from lightning.fabric.plugins.environments import ClusterEnvironment
+from lightning.pytorch.plugins.io import XLACheckpointIO
+from lightning.fabric.plugins.environments import XLAEnvironment
+from lightning.fabric.strategies.launchers.xla import _rank_teardown
+from lightning.fabric.utilities.types import _PATH
+from lightning.pytorch.core.optimizer import Optimizable
 from lightning_utilities.core.apply_func import (
     apply_to_collection,
     apply_to_collections,
@@ -58,54 +57,94 @@ from omegaconf import OmegaConf
 from pytorch_lightning.accelerators import Accelerator
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import Logger
-from pytorch_lightning.loops import (
-    OptimizerLoop,
-    PredictionLoop,
-    TrainingBatchLoop,
-    TrainingEpochLoop,
+from lightning.pytorch.loops import (
+    _TrainingEpochLoop as TrainingEpochLoop,
+    _PredictionLoop as PredictionLoop,
+    _EvaluationLoop as EvaluationLoop,
+    _FitLoop as FitLoop,
 )
-from pytorch_lightning.loops.dataloader.evaluation_loop import EvaluationLoop
-from pytorch_lightning.loops.fit_loop import FitLoop, _select_data_fetcher
-from pytorch_lightning.loops.utilities import _block_parallel_sync_behavior
-from pytorch_lightning.plugins import PLUGIN_INPUT
-from pytorch_lightning.plugins.io.checkpoint_plugin import CheckpointIO
-from pytorch_lightning.plugins.precision import PrecisionPlugin
+from lightning.pytorch.loops.utilities import _select_data_fetcher
+from lightning.fabric.utilities.data import (
+    _auto_add_worker_init_fn,
+    has_iterable_dataset,
+    _set_sampler_epoch,
+    sized_len
+)
+from lightning.fabric.plugins import CheckpointIO
+from lightning.pytorch.plugins import _PLUGIN_INPUT as PLUGIN_INPUT
+from lightning.pytorch.plugins.precision import Precision as PrecisionPlugin
+from lightning.pytorch.plugins.precision import XLAPrecision as XLAPrecisionPlugin
 from pytorch_lightning.profilers import Profiler
-from pytorch_lightning.strategies import Strategy, TPUSpawnStrategy
+from lightning.pytorch.strategies import Strategy, XLAStrategy
 from pytorch_lightning.strategies.launchers.xla import _XLALauncher
-from pytorch_lightning.trainer import setup
-from pytorch_lightning.trainer.connectors.accelerator_connector import (
+from pytorch_lightning.trainer import call, setup
+from lightning.pytorch.trainer.connectors.accelerator_connector import (
     _LITERAL_WARN,
-    AcceleratorConnector,
+    _PRECISION_INPUT,
+    _AcceleratorConnector as AcceleratorConnector,
 )
-from pytorch_lightning.trainer.connectors.callback_connector import CallbackConnector
-from pytorch_lightning.trainer.connectors.checkpoint_connector import (
-    CheckpointConnector,
+from lightning.pytorch.trainer.connectors.callback_connector import (
+    _CallbackConnector as CallbackConnector,
 )
-from pytorch_lightning.trainer.connectors.data_connector import DataConnector
-from pytorch_lightning.trainer.connectors.logger_connector import LoggerConnector
-from pytorch_lightning.trainer.connectors.logger_connector.result import (
+from lightning.pytorch.trainer.connectors.checkpoint_connector import (
+    _CheckpointConnector as CheckpointConnector,
+)
+from lightning.pytorch.trainer.connectors.data_connector import ( 
+    _DataConnector as DataConnector,
+    _request_dataloader,
+    _resolve_overfit_batches,
+    _check_dataloader_iterable,
+    _parse_num_batches,
+    _worker_check,
+)
+from lightning.pytorch.trainer.connectors.logger_connector import (
+    _LoggerConnector as LoggerConnector,
+)
+from lightning.pytorch.trainer.connectors.logger_connector.result import (
     _ResultCollection,
     _ResultMetric,
-    _ResultMetricCollection,
 )
-from pytorch_lightning.trainer.connectors.signal_connector import SignalConnector
-from pytorch_lightning.trainer.states import RunningStage, TrainerFn, TrainerState
-from pytorch_lightning.trainer.supporters import CombinedLoader
-from pytorch_lightning.trainer.trainer import Trainer
-from pytorch_lightning.tuner.tuning import Tuner
+from pytorch_lightning.trainer.connectors.signal_connector import (
+    _SignalConnector as SignalConnector
+)
+from lightning.pytorch.utilities import CombinedLoader
+from lightning.pytorch.trainer.states import RunningStage, TrainerFn, TrainerState, TrainerStatus
+
+from lightning.pytorch.trainer.trainer import Trainer
 from pytorch_lightning.utilities.argparse import _defaults_from_env_vars
-from pytorch_lightning.utilities.auto_restart import _add_capture_metadata_collate
 from pytorch_lightning.utilities.exceptions import MisconfigurationException
-from pytorch_lightning.utilities.imports import _fault_tolerant_training
-from pytorch_lightning.utilities.model_helpers import is_overridden
 from pytorch_lightning.utilities.rank_zero import rank_zero_warn
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
+from lightning.pytorch.utilities.model_helpers import is_overridden
 from torch import Tensor
-from torch.utils.data import DataLoader
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, Sampler, SequentialSampler
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 from torchmetrics import Metric
 from neuronx_distributed_training.utils import get_lnc_size, get_attribute_from_cfg
+
+
+def _is_dataloader_shuffled_patched(dataloader: object) -> bool:
+    '''
+    This function patches _is_data_loader_shuffled from PTL 2.5
+    '''
+    if hasattr(dataloader, "__pl_saved_kwargs"):
+        # this attribute is not part of PyTorch's DataLoader, but could have been set by
+        # our `_replace_init_method` context manager
+        if "shuffle" in dataloader.__pl_saved_kwargs:
+            return dataloader.__pl_saved_kwargs["shuffle"]
+        if "shuffle" in dataloader.__pl_saved_arg_names:
+            return dataloader.__pl_saved_args[dataloader.__pl_saved_arg_names.index("shuffle")]
+    if hasattr(dataloader, "dataset") and isinstance(dataloader.dataset, IterableDataset):
+        # shuffling is useless with iterable datasets
+        return False
+    if not hasattr(dataloader, "sampler"):
+        # shuffling is enabled via a sampler. No sampler, no shuffling
+        return False
+    sampler = dataloader.batch_sampler
+    # sampler = batch_sampler if batch_sampler is not None else dataloader.sampler
+    if isinstance(sampler, SequentialSampler):
+        return False
+    return isinstance(sampler, RandomSampler)
 
 
 def has_len_all_ranks_patched(
@@ -143,7 +182,7 @@ def has_len_all_ranks_patched(
         has_len = False
 
     # we are checking using lightning_lite, which doesn't know CombinedLoader
-    if has_len and new_has_iterable_dataset(dataloader):  # type: ignore [arg-type]
+    if has_len and has_iterable_dataset(dataloader):  # type: ignore [arg-type]
         rank_zero_warn(
             "Your `IterableDataset` has `__len__` defined."
             " In combination with multi-process data loading (when num_workers > 1),"
@@ -155,7 +194,7 @@ def has_len_all_ranks_patched(
     return has_len
 
 
-class TRNPrecisionPlugin(PrecisionPlugin):
+class TRNPrecisionPlugin(XLAPrecisionPlugin):
     """Precision plugin for TPU integration."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -165,13 +204,15 @@ class TRNPrecisionPlugin(PrecisionPlugin):
         self,
         optimizer: Optimizable,
         model: "pl.LightningModule",
-        optimizer_idx: int,
         closure: Callable[[], Any],
         **kwargs: Any,
     ) -> Any:
         """Hook to run the optimizer step."""
+
         if not isinstance(optimizer, ZeroRedundancyOptimizer):
-            closure = partial(self._wrap_closure, model, optimizer, optimizer_idx, closure)
+            #closure = partial(self._xla_wrap_closure, optimizer, closure)
+            closure = partial(self._wrap_closure, model, optimizer, closure)
+
         return optimizer.step(closure=closure, **kwargs)
 
 
@@ -232,10 +273,7 @@ class _NLPResultCollection(_ResultCollection):
             ### NEURON: Do not move metrics to device, results in unnnecessary compiles
             return metric
 
-        value = apply_to_collection(value, (Tensor, Metric), fn)
-        if isinstance(value, dict):
-            value = _ResultMetricCollection(value)
-        self[key] = value
+        self.update(apply_to_collection(value, (Tensor, Metric), fn))
 
     def update_metrics(self, key: str, value, batch_size: int) -> None:
         def fn(result_metric, v):
@@ -248,36 +286,233 @@ class _NLPResultCollection(_ResultCollection):
 
 
 class NLPEvaluationLoop(EvaluationLoop):
-    # We override this class to make sure we use _NLPResultCollection
-    # and avoid transferring results to device
-    def __init__(self, verbose: bool = True) -> None:
-        super().__init__(verbose)
+    def __init__(
+        self,
+        trainer: "pl.Trainer",
+        trainer_fn: TrainerFn,
+        stage: RunningStage,
+        verbose: bool = True,
+        inference_mode: bool = True,
+    ) -> None:
+        # We override this class to make strainer, trainer_fn, stage, verbose: bool = True) -> None:
+        super().__init__(trainer, trainer_fn, stage, verbose, inference_mode)
         self._results = _NLPResultCollection(training=False)
 
     def teardown(self) -> None:
         if self._data_fetcher is not None:
             self._data_fetcher.teardown()
             self._data_fetcher = None
-        self.epoch_loop.teardown()
 
     def _on_evaluation_start(self, *args: Any, **kwargs: Any) -> None:
         """Runs ``on_{validation/test}_start`` hooks."""
         assert self._results is not None
 
         hook_name = "on_test_start" if self.trainer.testing else "on_validation_start"
-        self.trainer._call_callback_hooks(hook_name, *args, **kwargs)
-        self.trainer._call_lightning_module_hook(hook_name, *args, **kwargs)
-        self.trainer._call_strategy_hook(hook_name, *args, **kwargs)
+        call._call_callback_hooks(self.trainer, hook_name, *args, **kwargs)
+        call._call_lightning_module_hook(self.trainer, hook_name, *args, **kwargs)
+        call._call_strategy_hook(self.trainer, hook_name, *args, **kwargs)
+
+    def setup_data(self) -> None:
+        '''
+        This function is overrides setup_data() from PTL 2.5
+        '''
+        trainer = self.trainer
+        trainer_fn = self._trainer_fn
+        if self._combined_loader is not None and trainer_fn == TrainerFn.FITTING and not self._should_reload_val_dl:
+            return
+
+        pl_module = trainer.lightning_module
+        limit_batches = trainer.limit_test_batches if trainer.testing else trainer.limit_val_batches
+        hook_name = "test_step" if trainer.testing else "validation_step"
+        if limit_batches == 0 or not is_overridden(hook_name, pl_module):
+            return
+
+        # store epoch of dataloader reset for reload_dataloaders_every_n_epochs
+        # it should not reload again if it has already reloaded during sanity_check
+        if trainer_fn == TrainerFn.FITTING and (
+            (trainer.sanity_checking and trainer.fit_loop.epoch_loop._should_check_val_epoch())
+            or not trainer.sanity_checking
+        ):
+            self._last_val_dl_reload_epoch = trainer.current_epoch
+
+        stage = self._stage
+        source = self._data_source
+        dataloaders = _request_dataloader(source)
+        trainer.strategy.barrier(f"{stage.dataloader_prefix}_dataloader()")
+
+        if not isinstance(dataloaders, CombinedLoader):
+            combined_loader = CombinedLoader(dataloaders, "sequential")
+        else:
+            combined_loader = dataloaders
+
+        if trainer_fn == TrainerFn.FITTING and trainer.overfit_batches > 0:
+            _resolve_overfit_batches(combined_loader, stage)
+
+        dataloaders = []
+        for dl in combined_loader.flattened:
+            _check_dataloader_iterable(dl, source, trainer_fn)
+            dl = NLPDataConnector._process_dataloader(trainer, trainer_fn, stage, dl)
+            dataloaders.append(dl)
+        combined_loader.flattened = dataloaders
+        self._combined_loader = combined_loader
+
+        allow_zero_length = pl_module.allow_zero_length_dataloader_with_multiple_devices
+        if trainer.datamodule is not None:
+            allow_zero_length |= trainer.datamodule.allow_zero_length_dataloader_with_multiple_devices
+
+        self._max_batches = []
+        for dl in combined_loader.flattened:
+            # determine number of batches
+            length = len(dl) if has_len_all_ranks_patched(dl, trainer.strategy, pl_module) else float("inf")
+            limit_batches = getattr(trainer, f"limit_{stage.dataloader_prefix}_batches")
+            num_batches = _parse_num_batches(stage, length, limit_batches)
+            self._max_batches.append(num_batches)
+
+        # this depends on the data used, so reset it too
+        self._seen_batches_per_dataloader = defaultdict(int)
 
 
 class NLPTrainingEpochLoop(TrainingEpochLoop):
-    def __init__(self, min_steps: Optional[int] = None, max_steps: int = -1) -> None:
-        super().__init__(min_steps, max_steps)
-        self.val_loop = NLPEvaluationLoop(verbose=True)
+    def __init__(self, trainer: "pl.Trainer", min_steps: Optional[int] = None, max_steps: int = -1) -> None:
+        super().__init__(trainer, min_steps, max_steps)
+        self.val_loop = NLPEvaluationLoop(
+            trainer, TrainerFn.FITTING, RunningStage.VALIDATING, verbose=False, inference_mode=False
+        )
         self._results = _NLPResultCollection(training=True)
 
 
+class NLPPredictionLoop(PredictionLoop):
+    # We override setup data to ensure has_len_all_ranks is using the patched version
+    def setup_data(self) -> None:
+        trainer = self.trainer
+        # a default `predict_step` exists in the LightningModule, so no need to check if it's overridden
+        if trainer.limit_predict_batches == 0:
+            return
+
+        source = self._data_source
+        dataloaders = _request_dataloader(source)
+        trainer.strategy.barrier("predict_dataloader()")
+
+        if not isinstance(dataloaders, CombinedLoader):
+            combined_loader = CombinedLoader(dataloaders, "sequential")
+        else:
+            combined_loader = dataloaders
+
+        allow_zero_length = trainer.lightning_module.allow_zero_length_dataloader_with_multiple_devices
+        if trainer.datamodule is not None:
+            allow_zero_length |= trainer.datamodule.allow_zero_length_dataloader_with_multiple_devices
+
+        trainer_fn = TrainerFn.PREDICTING
+        stage = RunningStage.PREDICTING
+        dataloaders = []
+        self.max_batches = []
+        for dl in combined_loader.flattened:
+            _check_dataloader_iterable(dl, source, trainer_fn)
+            dl = NLPDataConnector._process_dataloader(trainer, trainer_fn, stage, dl)
+            dataloaders.append(dl)
+
+            # determine number of batches
+            length = len(dl) if has_len_all_ranks_patched(dl, trainer.strategy, allow_zero_length) else float("inf")
+            num_batches = _parse_num_batches(stage, length, trainer.limit_predict_batches)
+            self.max_batches.append(num_batches)
+        combined_loader.flattened = dataloaders
+        self._combined_loader = combined_loader
+
+
 class NLPFitLoop(FitLoop):
+    # We override setup data to ensure has_len_all_ranks is using the patched version
+    def setup_data(self, updated_data_source=None) -> None:
+        if self._combined_loader is not None and not self._should_reload_train_dl and updated_data_source is None:
+            return
+
+        trainer = self.trainer
+        pl_module = trainer.lightning_module
+        if trainer.limit_train_batches == 0 or not is_overridden("training_step", pl_module):
+            return
+
+        logging.debug(f"{self.__class__.__name__}: resetting train dataloader")
+
+        source = updated_data_source if updated_data_source is not None else self._data_source
+        train_dataloader = _request_dataloader(source)
+        trainer.strategy.barrier("train_dataloader()")
+
+        if not isinstance(train_dataloader, CombinedLoader):
+            combined_loader = CombinedLoader(train_dataloader, "max_size_cycle")
+        else:
+            combined_loader = train_dataloader
+
+        if trainer.overfit_batches > 0:
+            _resolve_overfit_batches(combined_loader, mode=RunningStage.TRAINING)
+
+        trainer_fn = TrainerFn.FITTING
+        stage = RunningStage.TRAINING
+        dataloaders = []
+        for dl in combined_loader.flattened:
+            _check_dataloader_iterable(dl, source, trainer_fn)
+            dl = NLPDataConnector._process_dataloader(trainer, trainer_fn, stage, dl)
+            dataloaders.append(dl)
+        combined_loader.flattened = dataloaders
+        self._combined_loader = combined_loader
+
+        allow_zero_length = pl_module.allow_zero_length_dataloader_with_multiple_devices
+        if trainer.datamodule is not None:
+            allow_zero_length |= trainer.datamodule.allow_zero_length_dataloader_with_multiple_devices
+
+        limits = []
+        for dl in combined_loader.flattened:
+            # determine number of batches
+            length = len(dl) if has_len_all_ranks_patched(dl, trainer.strategy, allow_zero_length) else float("inf")
+            num_batches = _parse_num_batches(stage, length, trainer.limit_train_batches)
+            limits.append(num_batches)
+
+        combined_loader.limits = limits
+
+        self._load_combined_loader_states()
+
+        self._data_fetcher = _select_data_fetcher(trainer, RunningStage.TRAINING)
+        self._data_fetcher.setup(combined_loader)
+        iter(self._data_fetcher)  # creates the iterator inside the fetcher
+        max_batches = sized_len(combined_loader)
+        self.max_batches = max_batches if max_batches is not None else float("inf")
+        has_len_all_ranks_ = has_len_all_ranks_patched(combined_loader, trainer.strategy, allow_zero_length)
+
+        if self.max_batches == 0:
+            return
+
+        # store epoch of dataloader reset for reload_dataloaders_every_n_epochs
+        self._last_train_dl_reload_epoch = trainer.current_epoch
+
+        if isinstance(trainer.val_check_interval, int):
+            trainer.val_check_batch = trainer.val_check_interval
+            if trainer.val_check_batch > self.max_batches and trainer.check_val_every_n_epoch is not None:
+                raise ValueError(
+                    f" `val_check_interval` ({trainer.val_check_interval}) must be less than or equal"
+                    f" to the number of the training batches ({self.max_batches})."
+                    " If you want to disable validation set `limit_val_batches` to 0.0 instead."
+                    " If you want to validate based on the total training batches, set `check_val_every_n_epoch=None`."
+                )
+        else:
+            if not has_len_all_ranks_:
+                if trainer.val_check_interval == 1.0:
+                    trainer.val_check_batch = float("inf")
+                else:
+                    raise MisconfigurationException(
+                        "When using an IterableDataset for `train_dataloader`,"
+                        " `Trainer(val_check_interval)` must be `1.0` or an int. An int k specifies"
+                        " checking validation every k training batches."
+                    )
+            else:
+                trainer.val_check_batch = int(self.max_batches * trainer.val_check_interval)
+                trainer.val_check_batch = max(1, trainer.val_check_batch)
+
+        if trainer.loggers and self.max_batches < trainer.log_every_n_steps and not trainer.fast_dev_run:
+            rank_zero_warn(
+                f"The number of training batches ({self.max_batches}) is smaller than the logging interval"
+                f" Trainer(log_every_n_steps={trainer.log_every_n_steps}). Set a lower value for log_every_n_steps if"
+                " you want to see logs for the training epoch.",
+                category=PossibleUserWarning,
+            )
+
     # We override this class to make sure results are on CPU on run start
     def on_run_start(self) -> None:
         """Calls the ``on_train_start`` hook."""
@@ -285,32 +520,29 @@ class NLPFitLoop(FitLoop):
         if not self._iteration_based_training():
             self.epoch_progress.current.completed = self.epoch_progress.current.processed
 
-        self.trainer.reset_train_dataloader(self.trainer.lightning_module)
-        # reload the evaluation dataloaders too for proper display in the progress bar
-        if self.epoch_loop._should_check_val_epoch():
-            self.epoch_loop.val_loop._reload_evaluation_dataloaders()
+        if self.epoch_loop._should_check_val_epoch() and self.trainer.val_dataloaders is None:
+            self.trainer.validating = True
+            self.epoch_loop.val_loop.setup_data()
+            self.trainer.training = True
 
-        data_fetcher_cls = _select_data_fetcher(self.trainer)
-        self._data_fetcher = data_fetcher_cls(prefetch_batches=self.prefetch_batches)
-
-        self._is_fresh_start_epoch = True
         self._results.cpu()
 
-        self.trainer._call_callback_hooks("on_train_start")
-        self.trainer._call_lightning_module_hook("on_train_start")
-        self.trainer._call_strategy_hook("on_train_start")
+        call._call_callback_hooks(self.trainer, "on_train_start")
+        call._call_lightning_module_hook(self.trainer, "on_train_start")
+        call._call_strategy_hook(self.trainer, "on_train_start")
 
 
 class NLPCheckpointIO(XLACheckpointIO):
     """
     This class overrides PTL's XLACheckpointIO in order to use NxD's
     checkpoint APIs. For more information on XLAChekpointIO please see:
-    https://lightning.ai/docs/pytorch/1.8.6/api/pytorch_lightning.plugins.io.XLACheckpointIO.html
+    https://lightning.ai/docs/pytorch/2.5.0/api/lightning.pytorch.plugins.io.XLACheckpointIO.html
     """
-    def __init__(self, async_save=False, weight_init_only=False):
+    def __init__(self, async_save=False, weight_init_only=False, ptl_version: str = "1.8.6"):
         super().__init__()
         self._async_save = async_save
         self._weight_init_only = weight_init_only
+        self.ptl_version = ptl_version
 
     def load_checkpoint(self, checkpoint_path: _PATH, load_type_xser: bool) -> Dict[str, Any]:
         """PTL override to accomodate model parallel checkpoints"""
@@ -327,6 +559,8 @@ class NLPCheckpointIO(XLACheckpointIO):
             checkpoint = {}
         
         checkpoint["state_dict"] = model_state_dict # model shards should always exist
+        if not checkpoint.get("pytorch-lightning_version", None):
+            checkpoint["pytorch-lightning_version"] = self.ptl_version
 
         if not self._weight_init_only: # if loading weights only is not True then load optim states also along with model states.
             checkpoint["optimizer_states"] = [optimizer_state_dict]
@@ -422,11 +656,11 @@ class NLPCheckpointConnector(CheckpointConnector):
         epoch = self._loaded_checkpoint.get("epoch", 0)
         # set the `global_step` value for checkpoints before v1.6 without the progress tracking state.
         # it will be overwritten by the loop's state if it was also saved
-        batch_loop = fit_loop.epoch_loop.batch_loop
+        batch_loop = fit_loop.epoch_loop
         if pl_module.automatic_optimization:
-            batch_loop.optimizer_loop.optim_progress.optimizer.step.total.completed = global_step
+            batch_loop.automatic_optimization.optim_progress.optimizer.step.total.completed = global_step
         else:
-            batch_loop.manual_loop.optim_step_progress.total.completed = global_step
+            batch_loop.manual_optimization.optim_step_progress.total.completed = global_step
 
         # set the `current_epoch` value for checkpoints before v1.6 without the progress tracking state.
         # it will be overwritten by the loop's state if it was also saved
@@ -609,29 +843,67 @@ class NLPDataConnector(DataConnector):
         return loader_num_batches, dataloaders
 
 
+    def _process_dataloader(
+        trainer: "pl.Trainer", trainer_fn: TrainerFn, stage: RunningStage, dataloader: object
+    ) -> object:
+        '''
+        This function is overrides _process_dataloader() from PTL 2.5, so that it correctly
+        uses the Megatron custom sampler.
+        '''
+        if stage != RunningStage.TRAINING:
+            is_shuffled = _is_dataloader_shuffled_patched(dataloader)
+            # limit this warning only for samplers assigned automatically when shuffle is set
+            if is_shuffled:
+                rank_zero_warn(
+                    f"Your `{stage.dataloader_prefix}_dataloader`'s sampler has shuffling enabled,"
+                    " it is strongly recommended that you turn shuffling off for val/test dataloaders.",
+                    category=PossibleUserWarning,
+                )
+        else:
+            is_shuffled = True
+
+        # automatically add samplers
+        dataloader = trainer._data_connector._prepare_dataloader(dataloader, shuffle=is_shuffled, mode=stage)
+
+        # let the strategy inject its logic
+        dataloader = trainer.strategy.process_dataloader(dataloader)
+
+        # check the workers
+        _worker_check(
+            trainer=trainer,
+            dataloader=dataloader,
+            name=f"{stage.dataloader_prefix}_dataloader",
+        )
+
+        # add worker_init_fn for correct seeding in worker processes
+        _auto_add_worker_init_fn(dataloader, trainer.global_rank)
+
+        if trainer_fn != TrainerFn.FITTING:  # if we are fitting, we need to do this in the loop
+            # some users want validation shuffling based on the training progress
+            _set_sampler_epoch(dataloader, trainer.fit_loop.epoch_progress.current.processed)
+
+        return dataloader
+    
+
 class NLPTrainer(Trainer):
     @_defaults_from_env_vars
     def __init__(
         self,
-        logger: Union[Logger, Iterable[Logger], bool] = False,  # Change the default to False
-        enable_checkpointing: bool = False,  # Change the default to False
+        logger: Optional[Union[Logger, Iterable[Logger], bool]] = None,
+        enable_checkpointing: Optional[bool] = False,
         callbacks: Optional[Union[List[Callback], Callback]] = None,
         default_root_dir: Optional[_PATH] = None,
         gradient_clip_val: Optional[Union[int, float]] = None,
         gradient_clip_algorithm: Optional[str] = None,
         num_nodes: int = 1,
-        num_processes: Optional[int] = None,  # TODO: Remove in 2.0
-        devices: Optional[Union[List[int], str, int]] = None,
-        gpus: Optional[Union[List[int], str, int]] = None,  # TODO: Remove in 2.0
-        auto_select_gpus: bool = False,
-        tpu_cores: Optional[Union[List[int], str, int]] = None,  # TODO: Remove in 2.0
-        ipus: Optional[int] = None,  # TODO: Remove in 2.0
-        enable_progress_bar: bool = True,
+        num_processes: Optional[int] = None,
+        devices: Union[List[int], str, int] = "auto",
+        enable_progress_bar: Optional[bool] = True,
         overfit_batches: Union[int, float] = 0.0,
         track_grad_norm: Union[int, float, str] = -1,
         check_val_every_n_epoch: Optional[int] = 1,
         fast_dev_run: Union[int, bool] = False,
-        accumulate_grad_batches: Optional[Union[int, Dict[int, int]]] = None,
+        accumulate_grad_batches: int = 1,
         max_epochs: Optional[int] = None,
         min_epochs: Optional[int] = None,
         max_steps: int = -1,
@@ -642,36 +914,34 @@ class NLPTrainer(Trainer):
         limit_test_batches: Optional[Union[int, float]] = None,
         limit_predict_batches: Optional[Union[int, float]] = None,
         val_check_interval: Optional[Union[int, float]] = None,
-        log_every_n_steps: int = 50,
-        accelerator: Optional[Union[str, Accelerator]] = "tpu",
-        strategy: Optional[Union[str, Strategy]] = None,
+        log_every_n_steps: Optional[int] = 50,
+        accelerator: Union[str, Accelerator] = "tpu",
+        strategy: Union[str, Strategy] = "auto",
         sync_batchnorm: bool = False,
-        precision: Union[int, str] = 32,
-        enable_model_summary: bool = False,  # Change the default to False
-        num_sanity_val_steps: int = 2,
-        resume_from_checkpoint: Optional[Union[Path, str]] = None,
+        precision: Optional[_PRECISION_INPUT] = None,
+        enable_model_summary: Optional[bool] = False,
+        num_sanity_val_steps: Optional[int] = 2,
         profiler: Optional[Union[Profiler, str]] = None,
         benchmark: Optional[bool] = None,
         deterministic: Optional[Union[bool, _LITERAL_WARN]] = None,
         reload_dataloaders_every_n_epochs: int = 0,
         auto_lr_find: Union[bool, str] = False,
-        replace_sampler_ddp: bool = False,  # Change the default to False
         detect_anomaly: bool = False,
         auto_scale_batch_size: Union[str, bool] = False,
         plugins: Optional[Union[PLUGIN_INPUT, List[PLUGIN_INPUT]]] = None,
-        amp_backend: str = "native",
-        amp_level: Optional[str] = None,
         move_metrics_to_cpu: bool = False,
         multiple_trainloader_mode: str = "max_size_cycle",
         inference_mode: bool = True,
         lnc: int = None,
         sequential_move_factor: Optional[int] = None,
+        barebones: bool = False,
+        use_distributed_sampler: bool = False,
     ) -> None:
-        Trainer._log_api_event("init")
         logging.info(f"{self.__class__.__name__}: Initializing trainer with parameters: {locals()}")
         self.state = TrainerState()
         self.lnc = get_lnc_size(lnc)
         self.sequential_move_factor = sequential_move_factor
+        self.barebones = barebones
 
         if default_root_dir is not None:
             default_root_dir = os.fspath(default_root_dir)
@@ -685,55 +955,49 @@ class NLPTrainer(Trainer):
             raise ValueError("enable_model_summary is not supported.")
 
         # init connectors
-        self._data_connector = NLPDataConnector(self, multiple_trainloader_mode)
+        self._data_connector = NLPDataConnector(self)
+        self.multiple_trainloader_mode = multiple_trainloader_mode
 
         self._accelerator_connector = NLPAcceleratorConnector(
-            num_processes=num_processes,
             devices=devices,
-            tpu_cores=tpu_cores,
-            ipus=ipus,
             accelerator=accelerator,
             strategy=strategy,
-            gpus=gpus,
             num_nodes=num_nodes,
             sync_batchnorm=sync_batchnorm,
             benchmark=benchmark,
-            replace_sampler_ddp=replace_sampler_ddp,
             deterministic=deterministic,
-            auto_select_gpus=auto_select_gpus,
             precision=precision,
-            amp_type=amp_backend,
-            amp_level=amp_level,
             plugins=plugins,
+            use_distributed_sampler=use_distributed_sampler
         )
         self._logger_connector = LoggerConnector(self)
         self._callback_connector = CallbackConnector(self)
-        self._resume_from_checkpoint = resume_from_checkpoint
-        self._checkpoint_connector = NLPCheckpointConnector(self, resume_from_checkpoint)
+        self._checkpoint_connector = NLPCheckpointConnector(self)
         self._signal_connector = SignalConnector(self)
-        self.tuner = Tuner(self)
 
-        fit_loop = NLPFitLoop(min_epochs=min_epochs, max_epochs=max_epochs)
-        training_epoch_loop = NLPTrainingEpochLoop(min_steps=min_steps, max_steps=max_steps)
-        fit_loop.connect(epoch_loop=training_epoch_loop)
+        # move training epoch loop into fitloop
+        self.fit_loop = NLPFitLoop(self, min_epochs=min_epochs, max_epochs=max_epochs)
 
         # default .fit() loop
-        self.fit_loop = fit_loop
-
+        self.fit_loop.epoch_loop = NLPTrainingEpochLoop(self, min_steps=min_steps, max_steps=max_steps)
         # default .validate() loop
-        self.validate_loop = NLPEvaluationLoop()
+        self.validate_loop = NLPEvaluationLoop(
+            self, trainer_fn=TrainerFn.VALIDATING, stage=RunningStage.VALIDATING, inference_mode=inference_mode
+        )
 
         # default .test() loop
-        self.test_loop = NLPEvaluationLoop()
-
+        self.test_loop = NLPEvaluationLoop(self, trainer_fn=TrainerFn.TESTING, stage=RunningStage.TESTING, inference_mode=inference_mode)
+        
         # default .predict() loop
-        self.predict_loop = PredictionLoop()
+        self.predict_loop = PredictionLoop(self, inference_mode=inference_mode)
 
         # set when a checkpoint is loaded via `Trainer.{fit,validate,test,predict}`.
         self._ckpt_path: Optional[str] = None
 
         # init callbacks
+
         # Declare attributes to be set in _callback_connector on_trainer_init
+        self.accumulate_grad_batches = accumulate_grad_batches
         self._callback_connector.on_trainer_init(
             callbacks,
             enable_checkpointing,
@@ -741,7 +1005,6 @@ class NLPTrainer(Trainer):
             default_root_dir,
             enable_model_summary,
             max_time,
-            accumulate_grad_batches,
         )
 
         # init data flags
@@ -770,23 +1033,25 @@ class NLPTrainer(Trainer):
             )
 
         self.gradient_clip_val: Optional[Union[int, float]] = gradient_clip_val
+        # self.gradient_clip_algorithm: Optional[GradClipAlgorithmType] = (
+        #     GradClipAlgorithmType(gradient_clip_algorithm.lower()) if gradient_clip_algorithm is not None else None
+        # )
         self.gradient_clip_algorithm = None
         self.track_grad_norm: float = float(track_grad_norm)
 
         self._inference_mode: bool = inference_mode
 
         self._detect_anomaly: bool = detect_anomaly
-        self._setup_on_init()
 
-        # configure tuner
-        self.tuner.on_trainer_init(auto_lr_find, auto_scale_batch_size)
+        setup._log_device_info(self)
+        self.should_stop = False
 
         # configure profiler
         setup._init_profiler(self, profiler)
 
         # init logger flags
         self._loggers: List[Logger]
-        self._logger_connector.on_trainer_init(logger, log_every_n_steps, move_metrics_to_cpu)
+        self._logger_connector.on_trainer_init(logger, log_every_n_steps)
 
         # init debugging flags
         self.val_check_batch: Union[int, float]
@@ -817,127 +1082,12 @@ class NLPTrainer(Trainer):
             # restore callback states
             self._checkpoint_connector.restore_callbacks()
 
-    def is_resuming_from_checkpoint(self):
-        return self._resume_from_checkpoint is not None
 
-    def reset_train_dataloader(self, model: Optional["pl.LightningModule"] = None) -> None:
-        """Resets the train dataloader and initialises required variables (number of batches, when to validate,
-        etc.).
-
-        Args:
-            model: The ``LightningModule`` if calling this outside of the trainer scope.
-        """
-        source = self._data_connector._train_dataloader_source
-        pl_module = model or self.lightning_module
-        has_step = is_overridden("training_step", pl_module)
-        enable_training = self.limit_train_batches > 0
-        if not (source.is_defined() and has_step and enable_training):
-            return
-
-        self.train_dataloader = self._data_connector._request_dataloader(RunningStage.TRAINING)
-
-        if self.overfit_batches > 0:
-            self.train_dataloader = self._data_connector._resolve_overfit_batches(
-                self.train_dataloader, mode=RunningStage.TRAINING
-            )
-
-        # automatically add samplers
-        self.train_dataloader = apply_to_collection(
-            self.train_dataloader,
-            (DataLoader, CombinedLoader),
-            self._data_connector._prepare_dataloader,
-            mode=RunningStage.TRAINING,
-        )
-        loaders = (
-            self.train_dataloader.loaders
-            if isinstance(self.train_dataloader, CombinedLoader)
-            else self.train_dataloader
-        )
-
-        # check the workers recursively
-        apply_to_collection(loaders, DataLoader, self._data_connector._worker_check, "train_dataloader")
-
-        # add worker_init_fn for correct seeding in worker processes
-        apply_to_collection(loaders, DataLoader, _auto_add_worker_init_fn, rank=self.global_rank)
-
-        # add collate_fn to collect metadata for fault tolerant training
-        if _fault_tolerant_training():
-            apply_to_collection(loaders, DataLoader, _add_capture_metadata_collate)
-
-        # wrap the sequence of train loaders to a CombinedLoader object for computing the num_training_batches
-        if not isinstance(self.train_dataloader, CombinedLoader):
-            self.train_dataloader = CombinedLoader(loaders, self._data_connector.multiple_trainloader_mode)
-
-        module = model or self.lightning_module or self.datamodule
-        orig_train_batches = self.num_training_batches = (
-            len(self.train_dataloader)  # type: ignore[arg-type]
-            if has_len_all_ranks_patched(self.train_dataloader, self.strategy, module)
-            else float("inf")
-        )
-        if orig_train_batches == 0:
-            return
-
-        # store epoch of dataloader reset for reload_dataloaders_every_n_epochs
-        self._last_train_dl_reload_epoch = self.current_epoch
-
-        if isinstance(self.limit_train_batches, int):
-            self.num_training_batches = min(orig_train_batches, self.limit_train_batches)
-        elif self.num_training_batches != float("inf"):
-            self.num_training_batches = int(orig_train_batches * self.limit_train_batches)
-        elif self.limit_train_batches != 1.0:
-            raise MisconfigurationException(
-                "When using an `IterableDataset`, `Trainer(limit_train_batches)` must be `1.0` or an int."
-                "An int specifies `num_training_batches` to use."
-            )
-
-        if isinstance(self.val_check_interval, int):
-            self.val_check_batch = self.val_check_interval
-            if self.val_check_batch > self.num_training_batches and self.check_val_every_n_epoch is not None:
-                raise ValueError(
-                    f"`val_check_interval` ({self.val_check_interval}) must be less than or equal "
-                    f"to the number of the training batches ({self.num_training_batches}). "
-                    "If you want to disable validation set `limit_val_batches` to 0.0 instead."
-                    "If you want to validate based on the total training batches, set `check_val_every_n_epoch=None`."
-                )
-        else:
-            if not has_len_all_ranks_patched(self.train_dataloader, self.strategy, module):
-                if self.val_check_interval == 1.0:
-                    self.val_check_batch = float("inf")
-                else:
-                    raise MisconfigurationException(
-                        "When using an IterableDataset for `train_dataloader`,"
-                        " `Trainer(val_check_interval)` must be `1.0` or an int. An int k specifies"
-                        " checking validation every k training batches."
-                    )
-            else:
-                self.val_check_batch = int(self.num_training_batches * self.val_check_interval)
-                self.val_check_batch = max(1, self.val_check_batch)
-
-        if self.loggers and self.num_training_batches < self.log_every_n_steps:
-            rank_zero_warn(
-                f"The number of training batches ({self.num_training_batches}) is smaller than the logging interval"
-                f" Trainer(log_every_n_steps={self.log_every_n_steps}). Set a lower value for log_every_n_steps if"
-                " you want to see logs for the training epoch.",
-                category=PossibleUserWarning,
-            )
-
-        if (
-            self.num_training_batches == 0
-            and self.limit_train_batches > 0.0
-            and isinstance(self.limit_train_batches, float)
-            and orig_train_batches != float("inf")
-        ):
-            min_percentage = 1.0 / orig_train_batches
-            raise MisconfigurationException(
-                f"You requested to check {self.limit_train_batches} of the `train_dataloader` but"
-                f" {self.limit_train_batches} * {orig_train_batches} < 1. Please increase the"
-                f" `limit_train_batches` argument. Try at least"
-                f" `limit_train_batches={min_percentage}`"
-            )
-
-
-class NLPDDPStrategy(TPUSpawnStrategy):
+class NLPDDPStrategy(XLAStrategy):
     """DDP plugin for Pytorch Lightning. Needed to customize DDP for model parallel models.
+
+    This class overrides certain API's from XLAStrategy for NxDT. For more info on 
+    XLAStrategy, please see: https://lightning.ai/docs/pytorch/2.5.0/api/lightning.pytorch.strategies.XLAStrategy.html
 
     This class overrides certain API's from TPUSpawnStrategy for NxDT. For more info on 
     TPUSpawnStrategy, please see: https://lightning.ai/docs/pytorch/1.8.6/api/pytorch_lightning.strategies.TPUSpawnStrategy
@@ -955,27 +1105,24 @@ class NLPDDPStrategy(TPUSpawnStrategy):
         checkpoint_io: Optional[CheckpointIO] = None,
         precision_plugin: Optional[PrecisionPlugin] = None,
         debug: bool = False,
-        no_ddp_communication_hook: bool = True,  # Chamge the default to true
-        megatron_amp_o2: bool = False,
-        restore_path=None,
+        sync_module_states: bool = False,
         **_: Any,
     ) -> None:
         if cluster_environment is None:
             cluster_environment = XLAEnvironment()
-        super(TPUSpawnStrategy, self).__init__(
+        super(XLAStrategy, self).__init__(
             accelerator=accelerator,
             parallel_devices=parallel_devices,
             cluster_environment=cluster_environment,
             checkpoint_io=checkpoint_io,
             precision_plugin=precision_plugin,
             start_method="fork",
+            sync_module_states=sync_module_states
         )
         self._checkpoint_io: Optional[CheckpointIO]
         self.debug = debug
         self._launched = False
-        self.no_ddp_communication_hook = no_ddp_communication_hook
-        self.megatron_amp_o2 = megatron_amp_o2
-        self.restore_path = restore_path
+        self._sync_module_states = sync_module_states
         self._init_torch_dist()
 
     def _configure_launcher(self) -> None:
@@ -985,11 +1132,12 @@ class NLPDDPStrategy(TPUSpawnStrategy):
         # call PTL init ddp
         if torch.__version__.startswith("2.0"):
             import torch_xla.experimental.pjrt_backend  # noqa
-
             torch.distributed.init_process_group("xla", init_method="pjrt://")
         else:
             torch.distributed.init_process_group("xla")
 
+        self._launched = True
+        
     def setup_distributed(self, global_rank: int = None, world_size: int = None) -> None:
         super().setup_distributed()
 
@@ -1009,7 +1157,7 @@ class NLPDDPStrategy(TPUSpawnStrategy):
     def load_checkpoint(self, checkpoint_path: _PATH) -> Dict[str, Any]:
         return self.checkpoint_io.load_checkpoint(checkpoint_path, self.is_load_type_xser())
 
-    def load_model_state_dict(self, checkpoint: Mapping[str, Any]) -> None:
+    def load_model_state_dict(self, checkpoint: Mapping[str, Any], strict: bool = False) -> None:
         # Release strict state dict matching when using Megatron AMP-O2 to skip matching
         # half-precision module wrapper module.
         # TODO: Refactor this to be more generic.
@@ -1055,8 +1203,7 @@ class NLPDDPStrategy(TPUSpawnStrategy):
         return [".rotary_emb.inv_freq"]
 
     def remove_checkpoint(self, filepath: _PATH) -> None:
-        if not self.restore_path:
-            self.checkpoint_io.remove_checkpoint(filepath)
+        self.checkpoint_io.remove_checkpoint(filepath)
 
     @property
     def is_distributed(self) -> bool:
@@ -1076,8 +1223,11 @@ class NLPDDPStrategy(TPUSpawnStrategy):
             # When using model parallel, data parallel groups are non-trivial and they
             # correspond to the logical GPUs. This means that the GPUs that form a
             # single logical GPU all need to get the same batch of data.
+            if parallel_state.get_data_parallel_size() <= 1 and self.trainer.use_distributed_sampler:
+                raise ValueError("Data parallel size must be >= 1 if use_distributed_sampler is True")
+
             distributed_sampler_kwargs = dict(
-                num_replicas=app_state.data_parallel_size, rank=app_state.data_parallel_rank
+                num_replicas=parallel_state.get_data_parallel_size(), rank=parallel_state.get_data_parallel_rank()
             )
             return distributed_sampler_kwargs
 
@@ -1085,7 +1235,6 @@ class NLPDDPStrategy(TPUSpawnStrategy):
             return super(NLPDDPStrategy, self).distributed_sampler_kwargs
 
     def process_dataloader(self, dataloader):
-        TPUSpawnStrategy._validate_dataloader(dataloader)
         return dataloader
 
     def broadcast(self, obj, src: int = 0):
@@ -1121,7 +1270,7 @@ class NLPDDPStrategy(TPUSpawnStrategy):
         invalid_reduce_op_str = isinstance(reduce_op, str) and reduce_op.lower() not in ("sum", "mean", "avg")
         if invalid_reduce_op or invalid_reduce_op_str:
             raise ValueError(
-                "Currently, the TPUSpawnStrategy only supports `sum`, `mean`, `avg` for the reduce operation, got:"
+                "Currently, the XLAStrategy only supports `sum`, `mean`, `avg` for the reduce operation, got:"
                 f" {reduce_op}"
             )
 
