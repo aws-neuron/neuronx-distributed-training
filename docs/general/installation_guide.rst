@@ -5,8 +5,8 @@ Installation
 
 Neuronx Distributed Training framework is built on top of
 `NeuronxDistributed (NxD) <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/index.html>`_ ,
-`NeMo <https://github.com/NVIDIA/NeMo/tree/v1.14.0>`_ libraries and
-`PyTorch-Lightning <https://github.com/Lightning-AI/pytorch-lightning/tree/1.8.6>`_. The below guide will provide
+`NeMo <https://github.com/NVIDIA/NeMo/tree/v2.1.0>`_ libraries and
+`PyTorch-Lightning <https://github.com/Lightning-AI/pytorch-lightning/tree/2.5.0>`_. The below guide will provide
 a step-by-step instructions on how to setup the environment to run training using Neuronx Distributed Training
 framework.
 
@@ -110,6 +110,11 @@ We can now install the dependencies of the library using the following command:
 
     pip install -r requirements.txt ~/apex/dist/apex-0.1-py3-none-any.whl
 
+After installing the requirements, we need to patch some of the installations so run
+
+.. code-block :: shell
+
+    ./install_setup.sh
 
 Installing Neuronx Distributed Training framework
 -------------------------------------------------

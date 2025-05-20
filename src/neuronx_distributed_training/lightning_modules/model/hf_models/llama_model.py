@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import neuronx_distributed as nxd
 import torch
 from transformers import LlamaConfig
-from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 import sys
 from neuronx_distributed.utils.utils import hardware
 from neuronx_distributed_training.utils import get_dtype, get_attribute_from_cfg
@@ -15,7 +15,8 @@ from neuronx_distributed_training.models.hf_models.modeling_llama import (
     LlamaForCausalLM,
     LlamaRMSNorm,
     LlamaMLP,
-    ActivationMultiplyMLP
+    ActivationMultiplyMLP,
+    LlamaRotaryEmbedding
 )
 
 from .base_model import BaseHfModel
@@ -32,6 +33,7 @@ class HFLLamaModule(BaseHfModel):
         config.kv_shared_group_size = self.config.distributed_strategy.get("kv_replicator", 1)
         config.max_position_embeddings = self.config.model.get("max_position_embeddings", config.max_position_embeddings)
         config.use_flash_attention = self.config.model.fusions.flash_attention
+        config.use_ring_attention = get_attribute_from_cfg(self.config, 'ring_attention', False)
         hardware_type = hardware(get_platform_target())
         if hardware_type==hardware.TRN1:
             config.lnc = self.config.trainer.get("lnc", 1)
@@ -43,6 +45,8 @@ class HFLLamaModule(BaseHfModel):
             config.hidden_size = self.config.model.get('hidden_size')
         if self.config.model.get('rope_theta', -1) != -1:
             config.rope_theta = self.config.model.get('rope_theta')
+        config.head_dim = get_attribute_from_cfg(self.config, 'hidden_size', config.hidden_size) // config.num_attention_heads # overriding head_dim value, which was set in transformers code
+        config.transpose_nki_inputs = self.config.model.get('transpose_nki_inputs', True) # transpose_nki_inputs by default  
 
         if get_attribute_from_cfg(self.config, "peft", False):
             lora_config = nxd.modules.lora.LoraConfig(
@@ -62,12 +66,14 @@ class HFLLamaModule(BaseHfModel):
 
         if self.config.precision.type == "fp32":
             config.reduce_dtype = get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'fp32')) # RS would be in fp32 as there is no implicit downcasting
+            config.torch_dtype = torch.float32
         else:
             config.reduce_dtype = torch.bfloat16 # default RS type, this wont get downcasted to anything else, so RS will happen at bf16
             if get_dtype(self.config.precision.get('parallel_layers_reduce_dtype', 'bf16')) == torch.float32:
                 config.reduce_dtype = torch.float64
-
-        leaf_module_cls = [LlamaRMSNorm.__name__]
+            config.torch_dtype = torch.bfloat16
+           
+        leaf_module_cls = [LlamaRMSNorm.__name__, LlamaRotaryEmbedding.__name__]
         activation_recompute_modules = []
         recompute_modules = self.config.model.get("activations_checkpoint_recompute", [])
         granularity = self.config.model.get("activations_checkpoint_granularity", None)
@@ -101,12 +107,15 @@ class HFLLamaModule(BaseHfModel):
         # Here we make sure we use the same sine and cosine matrices for all layers.
         # Making use of same tensors would make the CSE algorithm eliminate the lookup call
         # from layers, keeping only lookup from first layer.
-        with torch.no_grad():
-            cos, sin = self.get_sin_cos_matrix(config)
-            for layer in model.model.layers:
-                layer.self_attn.rotary_emb.cos_cached = cos
-                layer.self_attn.rotary_emb.sin_cached = sin
+        # with torch.no_grad():
+        #     cos, sin = self.get_sin_cos_matrix(config)
+        #     for layer in model.model.layers:
+        #         layer.self_attn.rotary_emb.cos_cached = cos
+        #         layer.self_attn.rotary_emb.sin_cached = sin
 
+        if os.environ.get("XLA_DOWNCAST_BF16", None) == "0" and config.torch_dtype == torch.bfloat16:
+            model = model.to(torch.bfloat16)
+            
         return model
 
     def get_sin_cos_matrix(self, config):
@@ -128,9 +137,7 @@ class HFLLamaModule(BaseHfModel):
         # pre-defined layers.
         for key, nested_module in module._modules.items():
             if isinstance(nested_module, LlamaRotaryEmbedding):
-                module._modules[key] = LlamaRotaryEmbedding(
-                    nested_module.dim, nested_module.max_position_embeddings, nested_module.base, device
-                    )
+                module._modules[key] = LlamaRotaryEmbedding(nested_module.config, device)
         if isinstance(module, LlamaRMSNorm):
             module.weight.data.fill_(1.0)
         else:

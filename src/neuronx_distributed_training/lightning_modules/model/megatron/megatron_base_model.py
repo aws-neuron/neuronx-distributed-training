@@ -16,7 +16,7 @@
 
 from nemo.utils import logging
 from omegaconf import DictConfig, open_dict
-from pytorch_lightning.trainer.trainer import Trainer
+from lightning.pytorch.trainer.trainer import Trainer
 import sys
 from neuronx_distributed_training.models.megatron.transformer import CoreAttention, NeuronSwitchMLP
 

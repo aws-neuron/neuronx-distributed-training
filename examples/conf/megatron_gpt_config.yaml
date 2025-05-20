@@ -33,6 +33,7 @@ exp_manager:
     filename: 'megatron_gpt--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
     every_n_train_steps: 200
+    use_master_weights_in_ckpt: False
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
   log_gradient_norm: True # Logs gradient norm across model parallel ranks
   enable_recovery_time_instrumentation: False # default to not printing the detailing timing for recovery

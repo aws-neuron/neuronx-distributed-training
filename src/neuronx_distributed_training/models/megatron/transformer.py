@@ -232,7 +232,7 @@ class ParallelMLP(MegatronModule, adapter_mixins.AdapterModuleMixin):
         if self.dropout > 0:
             intermediate_parallel = F.dropout(intermediate_parallel, p=self.dropout, training=self.training)
 
-        infused_adapter = self.get_from_adapter_layer(AdapterName.MLP_INFUSED)
+        infused_adapter = self.get_adapter_module(AdapterName.MLP_INFUSED)
         if infused_adapter:
             intermediate_parallel = infused_adapter(intermediate_parallel)
 
@@ -1202,8 +1202,8 @@ class ParallelAttention(MegatronModule, adapter_mixins.AdapterModuleMixin):
             query_layer = query_layer.view(*new_tensor_shape)
 
         if self.is_adapter_available():
-            key_infused_adapter = self.get_from_adapter_layer(AdapterName.KEY_INFUSED)
-            value_infused_adapter = self.get_from_adapter_layer(AdapterName.VALUE_INFUSED)
+            key_infused_adapter = self.get_adapter_module(AdapterName.KEY_INFUSED)
+            value_infused_adapter = self.get_adapter_module(AdapterName.VALUE_INFUSED)
             if key_infused_adapter:
                 assert value_infused_adapter is not None, "Expected value_infused_adapter not found!"
                 kls = key_layer.shape
@@ -1949,7 +1949,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
             layernorm_input = bias_dropout_add_func(attention_output, attention_bias, residual, self.hidden_dropout)
 
             if self.is_adapter_available():
-                adapter_1 = self.get_from_adapter_layer(AdapterName.PRE_ATTN_ADAPTER)
+                adapter_1 = self.get_adapter_module(AdapterName.PRE_ATTN_ADAPTER)
                 if adapter_1:
                     strategy = adapter_1.adapter_strategy
                     layernorm_input = self.forward_single_enabled_adapter_(
@@ -2062,7 +2062,7 @@ class ParallelTransformerLayer_(MegatronModule, adapter_mixins.AdapterModuleMixi
         if (
             self.is_adapter_available()
         ):  # TODO: (@adithyre) was able to move adapter_2 back to the end of the transformer after ptl 1.7 update.
-            adapter_2 = self.get_from_adapter_layer(AdapterName.POST_ATTN_ADAPTER)
+            adapter_2 = self.get_adapter_module(AdapterName.POST_ATTN_ADAPTER)
             if adapter_2:
                 strategy = adapter_2.adapter_strategy
                 output = self.forward_single_enabled_adapter_(

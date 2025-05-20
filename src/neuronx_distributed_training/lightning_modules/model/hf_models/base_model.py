@@ -11,21 +11,25 @@ from neuronx_distributed_training.utils.model_utils import get_param_groups_by_w
 from neuronx_distributed_training.utils import get_attribute_from_cfg
 from ..base import BaseModelModule
 from ..base_dpo import DPOBaseModel
+from ..base_orpo import ORPOBaseModel
 from omegaconf import DictConfig, open_dict
-from pytorch_lightning.trainer.trainer import Trainer
-
+from lightning.pytorch.trainer.trainer import Trainer
 
 class BaseHfModel(BaseModelModule):
     def on_train_start(self):
         if get_attribute_from_cfg(self.config, "dpo", False):
             self.dpo_module = DPOBaseModel(self.config, self.trainer, self.model)
             self.dpo_module.on_train_start(self.trainer, self.model, self.config)
+        elif get_attribute_from_cfg(self.config, "orpo", False):
+            self.orpo_module = ORPOBaseModel(self.config, self.trainer, self.model)
         else:
             super().on_train_start()
 
     def model_fwd_calc_loss(self, batch):
         if get_attribute_from_cfg(self.config, "dpo", False):
             return self.dpo_module.model_fwd_calc_loss(self.model, batch, self.config)
+        elif get_attribute_from_cfg(self.config, "orpo", False):
+            return self.orpo_module.model_fwd_calc_loss(self.model, batch, self.config)
         else:
             return super().model_fwd_calc_loss(batch)
     

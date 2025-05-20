@@ -187,6 +187,7 @@ experiment logging directory, which parameters to log and how often to log, etc.
         save_last: False
         filename: 'megatron_llama--{step}-{consumed_samples}'
         every_n_train_steps: 200
+        use_master_weights_in_ckpt: False
     log_parameter_norm: True
     log_gradient_norm: True
     enable_recovery_time_instrumentation: False
@@ -254,6 +255,14 @@ How often we want to checkpoint.
     * **Type**: int
     * **Required**: True
 
+**checkpoint_callback_params.use_master_weights_in_ckpt**
+
+Whether or not to save master weights when checkpointing.
+
+    * **Type**: bool
+    * **Default**: False
+    * **Required**: False
+
 **log_parameter_norm**
 
 Set this to log parameter norm across model parallel ranks.
@@ -310,10 +319,19 @@ feature provided by NeuronxDistributed's
 
 **resume_from_checkpoint**
 
-Set this as the checkpoint file to load from. Check the SFT/DPO example config under ``conf`` on how to use it.
+Set this as the checkpoint file to load from. Check the SFT/DPO/ORPO example config under ``conf`` on how to use it.
 
     * **Type**: str
     * **Default**: null
+    * **Required**: False
+
+**ckpt_ptl_version**
+
+Set this only if your checkpoint does not contain the pytorch-lightning version in it.
+This version is the pytorch-lightning version the checkpoint was saved with.
+
+    * **Type**: str
+    * **Default**: "2.5.0"
     * **Required**: False
 
 .. _nxdt_config_distributed_strategy:
@@ -356,6 +374,16 @@ Use a value of 1 if no pipeline parallelism is used.
 
     * **Type**: int
     * **Required**: True
+
+**context_parallel_size**
+
+Context parallel degree to be used for sharding sequence.
+When context_parallel_size is greater than 1,
+``fusions.ring_attention`` must be set to ``True``.
+
+    * **Type**: int
+    * **Required**: False
+    * **Default**: 1
 
 **zero1**
 
@@ -513,6 +541,15 @@ This parameter is True by default.
     * **Type**: bool
     * **Required**: False
 
+**transpose_nki_inputs**
+
+This is set if users want to transpose the inputs to NKI FlashAttention function. To be used only when
+``fusions.flash_attention`` is ``True``. Using ``transpose_nki_inputs`` with ``fusions.flash_attention``
+can improve throughput. This parameter is True by default for all models, unless used otherwise.
+
+    * **Type**: bool
+    * **Required**: False
+
 **pipeline_cuts**
 
 This is set as a list of layer names if users want to specify manual cut points for pipeline parallelism.
@@ -520,6 +557,9 @@ One example is ['model.layers.10', 'model.layers.20'] in the case of PP=3.
 
     * **Type**: List[str]
     * **Required**: False
+
+.. note::
+    When using this param, the number of pipeline cuts should always be ``pipeline_model_parallel_size-1``.
 
 **use_cpu_initialization**
 
@@ -570,6 +610,16 @@ common for all models supported in the library.
 
     * **Type**: bool
     * **Required**: True
+
+**fusions.ring_attention**
+
+Setting this flag to ``True`` will use the ring attention module for
+both forward and backward.
+This parameter must be true when ``context_parallel_size``
+is greater than 1.
+
+    * **Type**: bool
+    * **Required**: False
 
 **fusions.do_layer_norm_weight_decay**
 
@@ -828,7 +878,7 @@ This config can help to decide the dtype of the model/optimizer.
     ``autocast`` config will follow the exact same precision strategy followed by ``torch.autocast``.
 
     .. note::
-        Autocast is not supported in this release.
+        Autocast is supported in this release for HF based LLama3 8B and Llama3 70B models.
 
     **manual**
 
@@ -846,8 +896,8 @@ Otherwise it will be defaulted to ``bf16`` in all other cases unless specified.
 Model Alignment Specific
 ------------------------
 
-You can configure fine-tuning (SFT) or model alignment (DPO)
-through the YAML file, coupled along with parameter-efficient
+You can configure fine-tuning (SFT) or model alignment (DPO/ORPO)
+through the YAML file, along with parameter-efficient
 fine-tuning using LoRA.
 
 .. code-block:: yaml
@@ -857,13 +907,19 @@ fine-tuning using LoRA.
         dpo:
             kl_beta: 0.01
             loss_type: sigmoid
-            max_dpo_prompt_length: 2048
+            max_prompt_length: 2048
             precompute_ref_log_probs: True
             truncation_mode: keep_start
 
-        # Alternatively, can also use SFT specific config
+        # Alternatively, you can also use SFT specific config
         sft:
             packing: True
+
+        # Alternatively, can also use ORPO specific config
+        orpo:
+            beta: 0.01
+            max_prompt_length: 2048
+            truncation_mode: keep_start
 
         # Parameter-efficient finetuning - LoRA config
         peft:
@@ -899,7 +955,7 @@ fine-tuning using LoRA.
                 * **Default**: ``sigmoid``
                 * **Required**: True
 
-            **max_dpo_prompt_length**
+            **max_prompt_length**
 
             Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
 
@@ -936,6 +992,32 @@ fine-tuning using LoRA.
                 * **Default**: False
                 * **Required**: False
 
+        **orpo**
+            Odds Ratio Preference Optimization (ORPO) specific parameters.
+
+            **beta**
+
+            KL-divergence beta to control divergence of policy model from reference model
+
+                * **Type**: float
+                * **Default**: 0.01
+                * **Required**: True
+
+            **max_prompt_length**
+
+            Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
+
+                * **Type**: integer
+                * **Required**: True
+
+            **truncation_mode**
+
+            To define how to truncate if size (prompt+response) exceeds seq_length
+            options: ["keep_start", "keep_end"]
+
+                * **Type**: str
+                * **Default**: ``keep_start```
+                * **Required**: True
 
         **peft**
             Configuration options for Parameter-Efficient Fine-Tuning (PEFT) methods,
@@ -984,7 +1066,7 @@ fine-tuning using LoRA.
 
             **target_modules**
 
-            List of model layers to apply LoRA.
+            List of model layers to apply `LoRA <https://arxiv.org/abs/2106.09685>`__.
 
                 * **Type**: list[str]
                 * **Default**: ["qkv_proj"] (for Llama)

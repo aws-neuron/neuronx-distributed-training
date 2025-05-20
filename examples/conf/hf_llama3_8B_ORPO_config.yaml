@@ -29,9 +29,9 @@ exp_manager:
     save_top_k: 1
     mode: max
     save_last: False
-    filename: 'hf_llama3_8B_DPO--{step}-{consumed_samples}'
+    filename: 'hf_llama3_8B_ORPO--{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${distributed_strategy.tensor_model_parallel_size}, ${distributed_strategy.pipeline_model_parallel_size}}
-    every_n_train_steps: 1000
+    every_n_train_steps: 10
     use_master_weights_in_ckpt: False
   log_parameter_norm: True # Logs parameter norm across model parallel ranks
   log_gradient_norm: True # Logs gradient norm across model parallel ranks
@@ -53,10 +53,10 @@ distributed_strategy:
 
 data:
   micro_batch_size: 1 # limited by GPU memory
-  global_batch_size: 4 # [DPO] batch size will be twice the global batch size here, since we concatenate and forward chosen and rejected responses per prompt together
-  train_dir: /home/ubuntu/data_dpo.jsonl # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
+  global_batch_size: 16 # [DPO/ORPO] batch size will be twice the global batch size here, since we concatenate and forward chosen and rejected responses per prompt together
+  train_dir: /home/ubuntu/data_orpo.jsonl # [SFT/DPO/ORPO] '/ubuntu/training.jsonl' or arrow file. As for ModelAlignment we use HF style dataloader, we also use HF style data file paths
   val_dir: null # [SFT/DPO] '/ubuntu/training.jsonl' or arrow file
-  dev_choose_samples: null # [SFT/DPO] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset
+  dev_choose_samples: null # [SFT/DPO/ORPO] if set, will use those many number of records from the head of the dataset instead of using all. Set to null to use full dataset
   seq_length: 4096
   tokenizer:
     type: /home/ubuntu/llama3_tokenizer # [SFT change 6 required]
@@ -69,7 +69,7 @@ model:
 
   # model architecture
   model_config: /home/ubuntu/config.json # TODO: Expand this into arguments in this file [SFT change 7 required]
-  encoder_seq_length: 8192
+  encoder_seq_length: 4096
   max_position_embeddings: 8192
   num_layers: 32
   hidden_size: 4096
@@ -93,25 +93,23 @@ model:
 
   optim:
     name: adamw_fp32OptState
-    lr: 5.0e-7
+    lr: 1.5e-4
     weight_decay: 0.01
     capturable: False
     betas:
     - 0.9
     - 0.999
     sched:
-      name: LinearAnnealingWithWarmUp
+      name: CosineAnnealing
       warmup_steps: 10
       max_steps: ${trainer.max_steps}
 
 model_alignment_strategy:
-  dpo:
-    kl_beta: 0.01 # [DPO] kl-divergence beta to control divergence from reference model
-    loss_type: sigmoid # [DPO] support sigmoid versions of optimized dpo loss; options
-    max_prompt_length: 2048 # [DPO] for final model inputs we do inputs+chosen or inputs+rejected (combined_input), this handles the max length of input only not combined_input
-    precompute_ref_log_probs: True # set to True, precompute reference model probs using pre-fit hook, False is not supported
+  orpo:
+    beta: 0.1 # [ORPO] kl-divergence beta to control divergence from reference model
+    max_prompt_length: 2048 # [DPO/ORPO] maximum length of prompt in input
     truncation_mode: keep_start # how to truncate if size(prompt+response) exceeds seq_length; options: ["keep_start", "keep_end"]
-
+  
 precision:
   type: 'mixed_precision' # ['bf16SR', 'fp32', 'autocast', 'mixed_precision', 'mixed_precisionSR', 'manual']
   # Set the following only if precision type is manual, otherwise they will be automatically set.

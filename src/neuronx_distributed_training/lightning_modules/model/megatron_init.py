@@ -31,6 +31,7 @@ def initialize_model_parallel_for_nemo(
     local_rank,
     tensor_model_parallel_size=1,
     pipeline_model_parallel_size=1,
+    context_parallel_size=1,
     virtual_pipeline_model_parallel_size=1,
     pipeline_model_parallel_split_rank=None,
     micro_batch_size=None,
@@ -43,12 +44,13 @@ def initialize_model_parallel_for_nemo(
     app_state.world_size = world_size
     app_state.local_rank = local_rank
     app_state.tensor_model_parallel_size = tensor_model_parallel_size
+    app_state.context_parallel_size = context_parallel_size
     app_state.pipeline_model_parallel_size = pipeline_model_parallel_size
     app_state.virtual_pipeline_model_parallel_size = virtual_pipeline_model_parallel_size
 
     app_state.tensor_model_parallel_rank = parallel_state.get_tensor_model_parallel_rank()
     app_state.pipeline_model_parallel_rank = parallel_state.get_pipeline_model_parallel_rank()
-    app_state.model_parallel_size = tensor_model_parallel_size * pipeline_model_parallel_size
+    app_state.model_parallel_size = tensor_model_parallel_size * pipeline_model_parallel_size * context_parallel_size
     app_state.data_parallel_size = parallel_state.get_data_parallel_size()
     app_state.pipeline_model_parallel_split_rank = pipeline_model_parallel_split_rank 
     app_state.virtual_pipeline_model_parallel_rank = None

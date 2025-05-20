@@ -40,6 +40,7 @@ exp_manager:
   save_bf16: False
   async_checkpointing: False # default to not use async checkpointing
   resume_from_checkpoint: /home/ubuntu/pretrained_ckpt/ # manually set the checkpoint file to load from. [ModelAlignment change required]
+  ckpt_ptl_version: 1.8.6 # update to PTL version you saved ckpt on
 
 distributed_strategy:
   tensor_model_parallel_size: 32

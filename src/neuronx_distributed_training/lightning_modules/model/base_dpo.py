@@ -7,8 +7,9 @@ import torch_xla.core.xla_model as xm
 from neuronx_distributed.parallel_layers.loss_functions import from_parallel_logits_to_logprobs
 from .base import BaseModelModule
 from omegaconf import DictConfig, open_dict
-from pytorch_lightning.trainer.trainer import Trainer
+from lightning.pytorch.trainer.trainer import Trainer
 import numpy as np
+from lightning.pytorch.trainer.connectors.data_connector import _DataLoaderSource
 
 class DPOBaseModel(BaseModelModule):
 
@@ -20,7 +21,7 @@ class DPOBaseModel(BaseModelModule):
             raise ImportError("trl is required for the DPO algorithm, but it is not available. Please install the library to continue.")
         
     @torch.no_grad()
-    def on_train_start(self, trainer, model, config) -> None:
+    def on_train_start(self, trainer, model, config, average_log_probs=False) -> None:
         device = xm.xla_device()
         model.eval()
         reference_chosen_logps, reference_rejected_logps = [], []
@@ -30,15 +31,19 @@ class DPOBaseModel(BaseModelModule):
             for batch_idx, batch in enumerate(dl):
                 len_chosen = batch["chosen_labels"].shape[0]
                 # batch size is doubled here, since we concatenate chosen and rejected responses on the batch dimension
-                concatenated_batch = trl.DPOTrainer.concatenated_inputs(batch, device=device)
-                outputs = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask'], use_cache=False)
+                self.concatenated_batch = trl.DPOTrainer.concatenated_inputs(batch, device=device)
+                outputs = model(self.concatenated_batch['concatenated_input_ids'], attention_mask=self.concatenated_batch['concatenated_attention_mask'], use_cache=False)
                 all_logits = outputs[0].clone().detach()
                 try:
-                    all_logps = from_parallel_logits_to_logprobs(vocab_parallel_logits=all_logits, target=concatenated_batch['concatenated_labels'].to(device), inference=True)
-                    loss_mask = concatenated_batch['concatenated_labels'][..., 1:] != -100
-                    all_logps = (all_logps * loss_mask).sum(-1)
+                    all_logps = from_parallel_logits_to_logprobs(vocab_parallel_logits=all_logits, target=self.concatenated_batch['concatenated_labels'].to(device), inference=False)
+                    loss_mask = self.concatenated_batch['concatenated_labels'][:, 1:] != -100
+                    mask_sum = loss_mask.sum(-1)
+                    if average_log_probs:
+                        all_logps = (all_logps * loss_mask).sum(-1) / torch.where(mask_sum < 1, torch.ones_like(mask_sum), mask_sum)
+                    else:
+                        all_logps = (all_logps * loss_mask).sum(-1)
                 except Exception:
-                    all_logps, _ = self.get_batch_logps(all_logits, concatenated_batch['concatenated_labels'].to(device))
+                    all_logps, _ = self.get_batch_logps(all_logits, self.concatenated_batch['concatenated_labels'].to(device))
 
                 # splitting chosen/rejected responses from concatenated output
                 chosen_logps, rejected_logps = torch.split(all_logps, [len_chosen, len(all_logps) - len_chosen])
@@ -55,25 +60,37 @@ class DPOBaseModel(BaseModelModule):
 
         trainer.datamodule.data_sets['train'] = trainer.datamodule.data_sets['train'].add_column("reference_chosen_logps", all_reference_chosen_logps)
         trainer.datamodule.data_sets['train'] = trainer.datamodule.data_sets['train'].add_column("reference_rejected_logps", all_reference_rejected_logps)
-        trainer.reset_train_dataloader(trainer.lightning_module)
+        trainer.fit_loop.setup_data(updated_data_source=_DataLoaderSource(trainer.datamodule, "train_dataloader"))
         del reference_chosen_logps, reference_rejected_logps   
         del all_reference_chosen_logps, all_reference_rejected_logps
         model.train()
 
-    def model_fwd_calc_loss(self, model, batch, config):
+    def policy_model_concatenated_forward(self, model, batch, average_log_probs=False):
+        import trl
         device = xm.xla_device()
         len_chosen = batch["chosen_labels"].shape[0]
-        concatenated_batch = trl.DPOTrainer.concatenated_inputs(batch, device=device)
-        outputs = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask'], use_cache=False)
+        self.concatenated_batch = trl.DPOTrainer.concatenated_inputs(batch, device=device)
+        outputs = model(self.concatenated_batch['concatenated_input_ids'], attention_mask=self.concatenated_batch['concatenated_attention_mask'], use_cache=False)
         all_logits = outputs[0]
         try:
-            all_logps = from_parallel_logits_to_logprobs(vocab_parallel_logits=all_logits, target=concatenated_batch['concatenated_labels'].to(device), inference=False)
-            loss_mask = concatenated_batch['concatenated_labels'][..., 1:] != -100
-            all_logps = (all_logps * loss_mask).sum(-1)
+            all_logps = from_parallel_logits_to_logprobs(vocab_parallel_logits=all_logits, target=self.concatenated_batch['concatenated_labels'].to(device), inference=False)
+            loss_mask = self.concatenated_batch['concatenated_labels'][:, 1:] != -100
+            mask_sum = loss_mask.sum(-1)
+            if average_log_probs:
+                all_logps = (all_logps * loss_mask).sum(-1) / torch.where(mask_sum < 1, torch.ones_like(mask_sum), mask_sum)
+            else:
+                all_logps = (all_logps * loss_mask).sum(-1)
         except Exception:
-            all_logps, _ = self.get_batch_logps(all_logits, concatenated_batch['concatenated_labels'].to(device))
+            all_logps, _ = self.get_batch_logps(all_logits, self.concatenated_batch['concatenated_labels'].to(device))
 
         policy_chosen_logps, policy_rejected_logps = torch.split(all_logps, [len_chosen, len(all_logps) - len_chosen])
+
+        return policy_chosen_logps, policy_rejected_logps, all_logits
+
+    def model_fwd_calc_loss(self, model, batch, config):
+        device = xm.xla_device()
+        policy_chosen_logps, policy_rejected_logps, _ = self.policy_model_concatenated_forward(model, batch, average_log_probs=False)
+
         reference_chosen_logps, reference_rejected_logps = batch["reference_chosen_logps"], batch["reference_rejected_logps"]
         kl_beta = config.model_alignment_strategy.dpo.kl_beta
 
@@ -85,7 +102,11 @@ class DPOBaseModel(BaseModelModule):
         ref_logratios = ref_logratios.to(device)
         logits = pi_logratios - ref_logratios
         loss = -torch.nn.functional.logsigmoid(kl_beta * logits).mean(0)
-        return loss
+        chosen_rewards = kl_beta * (policy_chosen_logps.to(device) - reference_chosen_logps.to(device)).detach()
+        rejected_rewards = kl_beta * (policy_rejected_logps.to(device) - reference_rejected_logps.to(device)).detach()
+        misc_metrics = {'chosen_rewards': chosen_rewards, 'rejected_rewards': rejected_rewards}
+
+        return loss, misc_metrics
 
     def get_batch_logps(
         self,

@@ -8,7 +8,7 @@ source /tmp/env/bin/activate
 
 # Build documentation
 pip install -r docs/requirements.txt
-doc8 --max-line-length 120 docs/
+doc8 --max-line-length 130 docs/
 make checklinks
 make html
 # exit when asked to build doc
