@@ -379,6 +379,8 @@ Use a value of 1 if no pipeline parallelism is used.
 
 Context parallel degree to be used for sharding sequence.
 When context_parallel_size is greater than 1,
+Context parallel degree to be used for sharding sequence.
+When context_parallel_size is greater than 1,
 ``fusions.ring_attention`` must be set to ``True``.
 
     * **Type**: int
@@ -546,6 +548,8 @@ This parameter is True by default.
 This is set if users want to transpose the inputs to NKI FlashAttention function. To be used only when
 ``fusions.flash_attention`` is ``True``. Using ``transpose_nki_inputs`` with ``fusions.flash_attention``
 can improve throughput. This parameter is True by default for all models, unless used otherwise.
+``fusions.flash_attention`` is ``True``. Using ``transpose_nki_inputs`` with ``fusions.flash_attention``
+can improve throughput. This parameter is True by default for all models, unless used otherwise.
 
     * **Type**: bool
     * **Required**: False
@@ -557,6 +561,9 @@ One example is ['model.layers.10', 'model.layers.20'] in the case of PP=3.
 
     * **Type**: List[str]
     * **Required**: False
+
+.. note::
+    When using this param, the number of pipeline cuts should always be ``pipeline_model_parallel_size-1``.
 
 .. note::
     When using this param, the number of pipeline cuts should always be ``pipeline_model_parallel_size-1``.
@@ -615,6 +622,8 @@ common for all models supported in the library.
 
 Setting this flag to ``True`` will use the ring attention module for
 both forward and backward.
+This parameter must be true when ``context_parallel_size``
+is greater than 1.
 This parameter must be true when ``context_parallel_size``
 is greater than 1.
 
@@ -879,6 +888,7 @@ This config can help to decide the dtype of the model/optimizer.
 
     .. note::
         Autocast is supported in this release for HF based LLama3 8B and Llama3 70B models.
+        Autocast is supported in this release for HF based LLama3 8B and Llama3 70B models.
 
     **manual**
 
@@ -898,6 +908,8 @@ Model Alignment Specific
 
 You can configure fine-tuning (SFT) or model alignment (DPO/ORPO)
 through the YAML file, along with parameter-efficient
+You can configure fine-tuning (SFT) or model alignment (DPO/ORPO)
+through the YAML file, along with parameter-efficient
 fine-tuning using LoRA.
 
 .. code-block:: yaml
@@ -908,12 +920,20 @@ fine-tuning using LoRA.
             kl_beta: 0.01
             loss_type: sigmoid
             max_prompt_length: 2048
+            max_prompt_length: 2048
             precompute_ref_log_probs: True
             truncation_mode: keep_start
 
         # Alternatively, you can also use SFT specific config
+        # Alternatively, you can also use SFT specific config
         sft:
             packing: True
+
+        # Alternatively, can also use ORPO specific config
+        orpo:
+            beta: 0.01
+            max_prompt_length: 2048
+            truncation_mode: keep_start
 
         # Alternatively, can also use ORPO specific config
         orpo:
@@ -956,6 +976,7 @@ fine-tuning using LoRA.
                 * **Required**: True
 
             **max_prompt_length**
+            **max_prompt_length**
 
             Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
 
@@ -992,6 +1013,32 @@ fine-tuning using LoRA.
                 * **Default**: False
                 * **Required**: False
 
+        **orpo**
+            Odds Ratio Preference Optimization (ORPO) specific parameters.
+
+            **beta**
+
+            KL-divergence beta to control divergence of policy model from reference model
+
+                * **Type**: float
+                * **Default**: 0.01
+                * **Required**: True
+
+            **max_prompt_length**
+
+            Set maximum length of prompt in the concatenated prompt and (chosen/rejected) response input
+
+                * **Type**: integer
+                * **Required**: True
+
+            **truncation_mode**
+
+            To define how to truncate if size (prompt+response) exceeds seq_length
+            options: ["keep_start", "keep_end"]
+
+                * **Type**: str
+                * **Default**: ``keep_start```
+                * **Required**: True
         **orpo**
             Odds Ratio Preference Optimization (ORPO) specific parameters.
 
@@ -1066,6 +1113,7 @@ fine-tuning using LoRA.
 
             **target_modules**
 
+            List of model layers to apply `LoRA <https://arxiv.org/abs/2106.09685>`__.
             List of model layers to apply `LoRA <https://arxiv.org/abs/2106.09685>`__.
 
                 * **Type**: list[str]

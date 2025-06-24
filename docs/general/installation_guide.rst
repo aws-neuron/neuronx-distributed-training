@@ -114,7 +114,8 @@ After installing the requirements, we need to patch some of the installations so
 
 .. code-block :: shell
 
-    ./install_setup.sh
+   chmod +x install_setup.sh
+   ./install_setup.sh
 
 Installing Neuronx Distributed Training framework
 -------------------------------------------------
