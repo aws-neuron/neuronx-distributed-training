@@ -23,4 +23,6 @@ setup(
     install_requires=["neuronx_distributed"],
     python_requires=">=3.7",
     package_dir={"": "src"},
+    require_wheel=True,  # Enable Python Wheel. Run 'brazil-build brazil_wheel'
+    doc_command='amazon_doc_utils_build_sphinx'
 )

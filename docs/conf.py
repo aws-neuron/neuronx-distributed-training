@@ -65,20 +65,13 @@ html_title = "NeuronxDistributedTraining Documentation"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinxcontrib.contentui",
-    "nbsphinx",
     "sphinx.ext.extlinks",
     "sphinx.ext.intersphinx",
-    "sphinx_plotly_directive",
-    "sphinxcontrib.programoutput",
     "df_tables",
-    "sphinx_design",
-    "ablog",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
     "local_documenter",
-    "sphinx_copybutton",
     "sphinx.ext.autosectionlabel",
 ]
 
@@ -110,21 +103,6 @@ napoleon_google_docstring = True
 
 projectblob = project_name + "/blob/" + branch_name
 projecttree = project_name + "/tree/" + branch_name
-
-
-# -- Options for Theme  -------------------------------------------------
-html_theme = "sphinx_book_theme"
-html_theme_options = {
-    "repository_url": "https://github.com/aws-neuron/" + project_name,
-    "use_issues_button": True,
-    "use_repository_button": True,
-    "use_download_button": True,
-    "use_fullscreen_button": True,
-    "use_edit_page_button": True,
-    "home_page_in_toc": False,
-    "repository_branch": branch_name,
-    "body_max_width": "80ch",
-}
 
 
 # -- Options for HTML output -------------------------------------------------

@@ -45,7 +45,7 @@ Download the dataset
 
 Let's download training-data scripts for our experiments
 
-.. code:: ipython3
+.. code:: python3
 
    wget https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama/get_dataset.py
 
@@ -72,7 +72,7 @@ and accept their License before requesting access. After access has been granted
 you may use the following python3 script along with your own hugging face token to download and save the tokenizer.
 
 
-.. code:: ipython3
+.. code:: python3
 
    from huggingface_hub import login
    from transformers import AutoTokenizer
@@ -87,13 +87,13 @@ you may use the following python3 script along with your own hugging face token 
 
 For Llama3.1/Llama3, make sure your base directory has the following files:
 
-.. code:: ipython3
+.. code:: python3
 
    './tokenizer_config.json', './special_tokens_map.json', './tokenizer.json'
 
 Next, let’s download and pre-process the dataset:
 
-.. code:: ipython3
+.. code:: python3
 
    mkdir ~/examples_datasets/
    python3 get_dataset.py --llama-version 3
@@ -104,7 +104,7 @@ Next, let’s download and pre-process the dataset:
 or 'namespace/repo_name'. Use `repo_type` argument if needed.``
 This could be because of a stale cache. Try deleting the cache using:
 
-.. code:: ipython3
+.. code:: python3
 
    sudo rm -rf ~/.cache/
 
@@ -126,7 +126,7 @@ which is considerably faster than the JIT flow.
 
 First, clone the open-source ``neuronx-distributed-training`` library
 
-.. code:: ipython3
+.. code:: python3
 
    git clone https://github.com/aws-neuron/neuronx-distributed-training
    cd neuronx-distributed-training/examples

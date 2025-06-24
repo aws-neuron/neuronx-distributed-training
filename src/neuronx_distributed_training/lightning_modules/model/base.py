@@ -38,6 +38,7 @@ from pytorch_lightning.utilities.rank_zero import rank_zero_warn
 from pytorch_lightning.utilities.signature_utils import is_param_in_hook_signature
 from torch import Tensor
 from torchmetrics import Metric
+from torch_xla import runtime
 
 from neuronx_distributed_training.models.megatron.module import param_is_not_shared
 from neuronx_distributed_training.utils import Throughput
@@ -50,7 +51,7 @@ class BaseModelModule(NLPModel):
         super().__init__(cfg.model, trainer, no_lm_init=no_lm_init)
         self.config = cfg
         self.trainer = trainer
-        dp_size = xm.xrt_world_size() / (
+        dp_size = runtime.world_size() / (
             self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size") * get_attribute_from_cfg(self.config, "context_parallel_size", 1)
         )
         self.num_microbatches = int(self.config.data.global_batch_size / (self.config.data.micro_batch_size * dp_size))

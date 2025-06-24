@@ -9,13 +9,14 @@ import torch_xla.core.xla_model as xm
 from neuronx_distributed_training.utils import get_attribute_from_cfg
 from lightning.pytorch.core.datamodule import LightningDataModule
 import logging
+from torch_xla import runtime
 
 class BaseDataModule(LightningDataModule):
     def __init__(self, cfg, trainer):
         super().__init__()
         self.config = cfg
         self.trainer = trainer
-        self.dp_size = xm.xrt_world_size() / (
+        self.dp_size = runtime.world_size() / (
             self.config.distributed_strategy.get("tensor_model_parallel_size") * self.config.distributed_strategy.get("pipeline_model_parallel_size") * get_attribute_from_cfg(self.config, "context_parallel_size", 1)
         )
         self.num_microbatches = int(
