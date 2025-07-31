@@ -40,6 +40,7 @@ class BaseHfModel(BaseModelModule):
         no_decay = ["bias"]
         if self.config.model.get("do_layer_norm_weight_decay", False):
             no_decay.append("LayerNorm")
+            no_decay.append("norm")
         self._optimizer_param_groups = get_param_groups_by_weight_decay(self.model, no_decay)
 
     def get_batch_length(self, batch):

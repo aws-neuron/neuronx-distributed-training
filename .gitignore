@@ -138,3 +138,9 @@ src/neuron_training_toolkit.egg-info
 *.whl
 **/.DS_Store
 __pycache__
+logs
+apt
+pip
+yum
+model_configs
+neuron_training_cluster_key.pem

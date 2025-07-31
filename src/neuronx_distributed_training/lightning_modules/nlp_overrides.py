@@ -1130,10 +1130,7 @@ class NLPDDPStrategy(XLAStrategy):
     
     def _init_torch_dist(self):
         # call PTL init ddp
-        if torch.__version__.startswith("2.0"):
-            import torch_xla.experimental.pjrt_backend  # noqa
-            torch.distributed.init_process_group("xla", init_method="pjrt://")
-        else:
+        if not torch.distributed.is_initialized():
             torch.distributed.init_process_group("xla")
 
         self._launched = True

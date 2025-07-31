@@ -106,7 +106,7 @@ precision:
   neuron_rt_stochastic_rounding_en: '0'
 
 compiler_flags: '--model-type transformer'
-compiler_cache_url: /home/ubuntu/neuron_cache
+compiler_cache_url: /workspace/neuron_cache
 aync_exec_max_inflight_requests: 5
 bucket_size_collectives: 1024
 neuron_rt_exec_timeout: 100

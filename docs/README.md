@@ -6,7 +6,7 @@
 ```
 git clone https://github.com/NVIDIA/apex.git
 cd apex
-git checkout 23.05
+git checkout 25.07
 ```
 
 2. Replace the contents of the setup.py with the following contents:

@@ -191,6 +191,10 @@ class BaseModelModule(NLPModel):
         # we zero grads here because we also call backward in the apex fwd/bwd functions
         self._optimizer.zero_grad()
         
+        #batch['input_ids'] has shape [B,Seq_len]
+        if 'input_ids' in batch:
+            assert batch['input_ids'].shape[1] == self.config.model.get("encoder_seq_length"), f"Mismatch in input data {batch['input_ids'].shape[1]} and sequence length {self.config.model.get('encoder_seq_length')}"
+
         # Split batch if CP is enabled
         batch = get_batch_on_this_context_parallel_rank(batch)
 
