@@ -16,7 +16,7 @@ assignees: ''
 
 ## Release Artifacts
 
-[Which release was used e.g. 2.23,2.24 etc.]
+[Which release was used e.g. Release_2.23, Release_2.24 etc.]
 
 ## Model Type
 
