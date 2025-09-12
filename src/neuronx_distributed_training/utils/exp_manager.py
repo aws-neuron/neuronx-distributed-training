@@ -15,7 +15,7 @@
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from shutil import copy, move
@@ -49,7 +49,7 @@ class CallbackParams(nemo_exp_manager.CallbackParams):
 
 @dataclass
 class ExpManagerConfig(nemo_exp_manager.ExpManagerConfig):
-    checkpoint_callback_params: Optional[CallbackParams] = CallbackParams()
+    checkpoint_callback_params: Optional[CallbackParams] = field(default_factory=CallbackParams)
     log_parameter_norm: Optional[bool] = True # Logs parameter norm across model parallel ranks
     log_gradient_norm: Optional[bool] = True # Logs gradient norm across model parallel ranks
     enable_recovery_time_instrumentation: Optional[bool] = False # default to not printing the detailing timing for recovery

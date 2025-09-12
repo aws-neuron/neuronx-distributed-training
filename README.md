@@ -40,10 +40,7 @@ setup(
 python setup.py bdist_wheel
 ```
 
-### TRN1 PC - DO-NOT-DELETE-NEURON-TRAINING-TRN1-PC
-- ARN: `arn:aws:cloudformation:us-west-2:621547421844:stack/DO-NOT-DELETE-NEURON-TRAINING-PC/6426e3a0-26e2-11f0-963d-0a0ac6f2872f`
-- HeadNode `i-07bcd998d1eb9027a` IP: `ec2-44-234-60-97.us-west-2.compute.amazonaws.com`
-- FSX: File System ID: `fs-074e75aa92df10ac1`
+4. After this, you should see the wheel at `dist/`. You can use this for installation in next section.
 
 #### Install the neuron deps:
 

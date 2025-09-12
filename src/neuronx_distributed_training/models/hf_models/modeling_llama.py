@@ -39,10 +39,7 @@ from transformers.modeling_outputs import (
 )
 from transformers.cache_utils import Cache
 from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_llama import (
-    LLAMA_INPUTS_DOCSTRING,
-    LLAMA_START_DOCSTRING,
-)
+
 from transformers.models.llama.modeling_llama import LlamaAttention as LlamaAttentionHF
 from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer as LlamaDecoderLayerHF,
@@ -88,6 +85,13 @@ from neuronx_distributed.parallel_layers.parallel_state import (
 )
 from neuronx_distributed.overrides.transformer_overrides import apply_rotary_pos_emb
 from neuronx_distributed_training.utils.utils import get_cast_dtype
+
+#To handle transformer version conflicts for DPO
+try:
+    from transformers.utils import auto_docstring
+except ImportError:
+    def auto_docstring(cls_or_fn):
+        return cls_or_fn
 
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
@@ -527,10 +531,8 @@ class LlamaDecoderLayer(LlamaDecoderLayerHF):
         )
 
 
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
-)
+
+@auto_docstring
 class LlamaModel(LlamaModelHF):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
@@ -576,7 +578,7 @@ class LlamaModel(LlamaModelHF):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -737,7 +739,7 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @auto_docstring
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

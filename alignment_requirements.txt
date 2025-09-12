@@ -1,0 +1,5 @@
+trl==0.10.1
+transformers==4.48.0
+datasets==2.19.1
+requests<2.32.0
+s3fs==2024.3.1

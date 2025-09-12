@@ -58,7 +58,7 @@ from neuronx_distributed.modules.moe.routing import RouterTopK, RouterSinkhorn
 from neuronx_distributed.modules.moe.expert_mlps import ExpertMLPs
 from neuronx_distributed.modules.rms_norm import RMSNorm
 from packaging import version
-from transformers.utils import is_torch_tpu_available
+from transformers.utils import is_torch_xla_available
 
 from .fused_layer_norm import get_layer_norm
 from .rotary_pos_embedding import RotaryEmbedding, apply_rotary_pos_emb
@@ -588,7 +588,7 @@ class CoreAttention(MegatronModule):
         sq, b, np, hn = query_layer.shape
 
         # Materialize attention mask right before use
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             if self.sliding_window and self.sliding_window != sq:
 
                 def create_binary_sliding_window_attention_mask(seq_len, window_size):

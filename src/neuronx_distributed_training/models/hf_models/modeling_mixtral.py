@@ -37,10 +37,6 @@ from transformers.modeling_outputs import (
 from transformers.models.llama.modeling_llama import LlamaMLP as LlamaMLPHF
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 from transformers.models.mixtral.modeling_mixtral import (
-    MIXTRAL_INPUTS_DOCSTRING,
-    MIXTRAL_START_DOCSTRING,
-)
-from transformers.models.mixtral.modeling_mixtral import (
     MixtralAttention as MixtralAttentionHF,
 )
 from transformers.models.mixtral.modeling_mixtral import (
@@ -65,6 +61,7 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    auto_docstring,
 )
 
 import neuronx_distributed.parallel_layers.utils as neuronx_dist_utils
@@ -577,11 +574,7 @@ class MixtralRotaryEmbedding(MixtralRotaryEmbeddingHF):
         sin = sin * self.attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
-@add_start_docstrings(
-    "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
-    MIXTRAL_START_DOCSTRING,
-)
+@auto_docstring
 class MixtralModel(MixtralModelHF):
     """
     Neuron implementation of MixtralModel. Comparing to HuggingFace version, the following changes are included:
@@ -611,7 +604,7 @@ class MixtralModel(MixtralModelHF):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -782,7 +775,7 @@ class MixtralForCausalLM(MixtralForCausalLMHF):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
+    @auto_docstring
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
