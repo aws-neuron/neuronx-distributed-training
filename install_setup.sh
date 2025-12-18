@@ -17,3 +17,4 @@ sed -i 's/get_megatron_pretrained_bert_models()/[]/g' $VENV_PATH/nemo/collection
 # Remove filepath checking as it could be an S3 path when S3 checkpointing
 sed -i 's/ and self\._fs\.exists(ckpt_to_dir(filepath))//g' $VENV_PATH/nemo/utils/callbacks/nemo_model_checkpoint.py
 
+

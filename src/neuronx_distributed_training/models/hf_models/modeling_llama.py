@@ -93,6 +93,7 @@ except ImportError:
     def auto_docstring(cls_or_fn):
         return cls_or_fn
 
+
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
 
@@ -277,7 +278,7 @@ class LlamaAttention(LlamaAttentionHF):
 
         self.config.fuse_qkv = getattr(self.config, "fuse_qkv", True)
             
-        if get_context_model_parallel_size() > 1 and not self.use_ring_attention :
+        if get_context_model_parallel_size() > 1 and not self.use_ring_attention:
             raise ValueError(
                 "Context parallelism is only supported with ring attention. Please set `use_ring_attention` to True to use context parallelism with ring attention"
         )
@@ -362,23 +363,6 @@ class LlamaAttention(LlamaAttentionHF):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         self.core_attn = CoreAttention()
-    
-    # def _init_rope(self):
-    #     if self.config.rope_scaling is None:
-    #         self.rotary_emb = LlamaRotaryEmbedding(dim=self.head_dim, max_position_embeddings=self.max_position_embeddings)
-    #     else:
-    #         scaling_type = self.config.rope_scaling["type"]
-    #         scaling_factor = self.config.rope_scaling["factor"]
-    #         if scaling_type == "linear":
-    #             self.rotary_emb = LlamaLinearScalingRotaryEmbedding(
-    #                 dim=self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
-    #             )
-    #         elif scaling_type == "dynamic":
-    #             self.rotary_emb = LlamaDynamicNTKScalingRotaryEmbedding(
-    #                 dim=self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
-    #             )
-    #         else:
-    #             raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def forward(
         self,
@@ -393,11 +377,31 @@ class LlamaAttention(LlamaAttentionHF):
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         assert use_cache is False, "KV-Cache flow is not fully supported"
-        bsz, q_len, _ = hidden_states.size()
-
+        input_shape = hidden_states.shape[:-1]
+     
         if self.config.sequence_parallel_enabled:
-            q_len, bsz, _ = hidden_states.size()
-            q_len = q_len * get_tensor_model_parallel_size()
+            if len(input_shape) == 2:
+                q_len, bsz = input_shape
+                q_len = q_len * get_tensor_model_parallel_size()
+            elif len(input_shape) == 1:
+                # 2D input: add batch dimension
+                hidden_states = hidden_states.unsqueeze(1)
+                input_shape = hidden_states.shape[:-1]
+                q_len = input_shape[0] * get_tensor_model_parallel_size()
+                bsz = 1
+            else:
+                raise ValueError(f"Unexpected input_shape {input_shape} with sequence_parallel_enabled")
+        else:
+            if len(input_shape) == 2:
+                bsz, q_len = input_shape
+            elif len(input_shape) == 1:
+                # 2D input: add sequence dimension
+                hidden_states = hidden_states.unsqueeze(1)
+                input_shape = hidden_states.shape[:-1]
+                bsz = input_shape[0]
+                q_len = 1
+            else:
+                raise ValueError(f"Unexpected input_shape {input_shape} without sequence_parallel")
 
         if self.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.pretraining_tp
@@ -405,15 +409,9 @@ class LlamaAttention(LlamaAttentionHF):
             key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
             value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
 
-            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.pretraining_tp)]
-            query_states = torch.cat(query_states, dim=-1)
-
-            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.pretraining_tp)]
-            key_states = torch.cat(key_states, dim=-1)
-
-            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.pretraining_tp)]
-            value_states = torch.cat(value_states, dim=-1)
-
+            query_states = torch.cat([F.linear(hidden_states, query_slices[i]) for i in range(self.pretraining_tp)], dim=-1)
+            key_states = torch.cat([F.linear(hidden_states, key_slices[i]) for i in range(self.pretraining_tp)], dim=-1)
+            value_states = torch.cat([F.linear(hidden_states, value_slices[i]) for i in range(self.pretraining_tp)], dim=-1)
         else:
             if (
                 self.config.fuse_qkv
@@ -421,7 +419,7 @@ class LlamaAttention(LlamaAttentionHF):
                 and self.config.kv_shared_group_size == 1
             ):
                 qkv_states = self.qkv_proj(hidden_states)
-                query_states, key_states, value_states = qkv_states.split(self.split_size, dim=2)
+                query_states, key_states, value_states = qkv_states.split(self.split_size, dim=-1)
             elif self.config.qkv_linear:
                 query_states, key_states, value_states = self.qkv_proj(hidden_states)
             else:
@@ -429,13 +427,17 @@ class LlamaAttention(LlamaAttentionHF):
                 key_states = self.k_proj(hidden_states)
                 value_states = self.v_proj(hidden_states)
 
-        # permute/transpose qkv
         query_states, key_states, value_states, seq_len_dim_index = self.permute_qkv_for_attn(
             query_states, key_states, value_states, bsz, q_len, self.num_heads,
             self.num_key_value_heads, self.head_dim, self.config
         )
 
         cos, sin = position_embeddings
+        
+        if cos.shape[1] != q_len:
+            cos = cos[:, :q_len, :]
+            sin = sin[:, :q_len, :]
+        
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin, None, 
             self.use_flash_attention, self.config.transpose_nki_inputs
@@ -452,7 +454,16 @@ class LlamaAttention(LlamaAttentionHF):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_output = self.call_attn_impln(query_states, key_states, value_states)
+        
+        if self.use_ring_attention and q_len >= 1024:
+            attn_output = nki_ring_attn_func(query_states, key_states, value_states, 
+                                            torch.distributed.get_rank(), 
+                                            get_context_model_parallel_src_tgt_pairs())
+        elif self.use_flash_attention:
+            attn_output = nki_flash_attn_func(query_states, key_states, value_states, 
+                                            self.lnc, transpose_nki_inputs=self.config.transpose_nki_inputs)
+        else:
+            attn_output = self.core_attn(query_states, key_states, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -468,25 +479,14 @@ class LlamaAttention(LlamaAttentionHF):
             attn_output = attn_output.reshape(bsz, q_len, self.hidden_size // get_tensor_model_parallel_size())
 
         if self.pretraining_tp > 1:
-            attn_output = attn_output.split(self.hidden_size // self.pretraining_tp, dim=2)
+            attn_output = attn_output.split(self.hidden_size // self.pretraining_tp, dim=-1)
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.pretraining_tp, dim=1)
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.pretraining_tp)])
         else:
             attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
         
-        return attn_output, attn_weights#, past_key_value
-    
-    def call_attn_impln(self, query_states, key_states, value_states):
-        if self.use_ring_attention:
-            attn_output = nki_ring_attn_func(query_states, key_states, value_states, torch.distributed.get_rank(), get_context_model_parallel_src_tgt_pairs())
-        elif self.use_flash_attention:
-            attn_output = nki_flash_attn_func(query_states, key_states, value_states, self.lnc, transpose_nki_inputs=self.config.transpose_nki_inputs)
-        else:
-            attn_output = self.core_attn(query_states, key_states, value_states)
-        return attn_output
+        attn_weights = None if not output_attentions else None
+        return attn_output, attn_weights
 
     def reshape_and_permute_states_for_fa(self, states, bsz, q_len, num_heads, head_dim, use_sequence_parallel):
         if use_sequence_parallel:
@@ -530,6 +530,43 @@ class LlamaDecoderLayer(LlamaDecoderLayerHF):
             config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled
         )
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        
+        hidden_states = self.mlp(hidden_states)
+        
+        hidden_states = residual + hidden_states
+ 
+        return hidden_states, self_attn_weights
 
 
 @auto_docstring
@@ -572,9 +609,6 @@ class LlamaModel(LlamaModelHF):
                 device=inputs_embeds.device,
                 past_key_values_length=past_key_values_length,
             )
-
-        if attention_mask is not None:
-            pass
 
         return combined_attention_mask
 
@@ -632,14 +666,6 @@ class LlamaModel(LlamaModelHF):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
-        # if attention_mask is None:
-        #     attention_mask = torch.ones(
-        #         (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-        #     )
-        # attention_mask = self._prepare_decoder_attention_mask(
-        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        # )
 
         hidden_states = inputs_embeds
 
@@ -802,8 +828,7 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
         hidden_states = outputs[0]
         if self.pretraining_tp > 1:
             lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
+            logits = torch.cat([F.linear(hidden_states, lm_head_slices[i]) for i in range(self.pretraining_tp)], dim=-1)
         else:
             logits = self.lm_head(hidden_states)
             if self.config.sequence_parallel_enabled:
@@ -828,9 +853,12 @@ class LlamaForCausalLM(LlamaForCausalLMHF):
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            per_token_loss = loss_fct(shift_logits, shift_labels)
+            valid_mask = (shift_labels != -100).float()
+            per_token_loss = per_token_loss * valid_mask
 
-            loss = torch.mean(loss)
+            denom = valid_mask.sum().clamp_min(1.0)
+            loss = per_token_loss.sum() / denom
 
         if not return_dict:
             output = (logits,) + outputs[1:]
