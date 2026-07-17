@@ -53,15 +53,21 @@ class ConcatDataset(Dataset):
             pad_id_map['input_ids'] = EOS_ID
 
             while idx<len_data_points and \
-                len(temp_packed_data['input_ids'])+len(original_tokenized_data['input_ids'][idx]) < chunk_size:
-            
+                len(temp_packed_data['input_ids'])+len(original_tokenized_data['input_ids'][idx]) <= chunk_size:
+
+                fills_chunk = (
+                    len(temp_packed_data['input_ids']) +
+                    len(original_tokenized_data['input_ids'][idx]) == chunk_size
+                )
                 for k in ['input_ids','attention_mask','labels']:
-                    temp_packed_data[k].extend(original_tokenized_data['input_ids'][idx] + [pad_id_map[k]])
+                    temp_packed_data[k].extend(original_tokenized_data[k][idx])
+                    if not fills_chunk:
+                        temp_packed_data[k].append(pad_id_map[k])
 
                 idx += 1
 
             # if any record has more than chunk size tokens ignore it.
-            if idx<len_data_points and len(original_tokenized_data['input_ids'][idx])>chunk_size-1:
+            if idx<len_data_points and len(original_tokenized_data['input_ids'][idx])>chunk_size:
                 idx+=1
 
             pad_id_map['input_ids'] = original_pad_id
